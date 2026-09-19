@@ -1,4 +1,4 @@
-"""Regression: router runtime must boot without hypermesh_service.seed.
+"""Regression: gateway runtime must boot without hypermesh_service.seed.
 
 #72 imported MARKETPLACE_TENANT_ID from hypermesh_service.seed. The GHCR
 hypermesh-gateway image only copies ticket.py, so that import Exited(1).
@@ -37,14 +37,14 @@ def _seed_import_hits(path: Path) -> list[str]:
     return hits
 
 
-def test_router_runtime_source_does_not_import_hypermesh_service_seed():
+def test_gateway_runtime_source_does_not_import_hypermesh_service_seed():
     offenders: list[str] = []
     for path in ROUTER_SRC.rglob("*.py"):
         offenders.extend(_seed_import_hits(path))
-    assert offenders == [], f"router image does not ship seed.py: {offenders}"
+    assert offenders == [], f"gateway image does not ship seed.py: {offenders}"
 
 
-def test_router_dockerfile_does_not_copy_hypermesh_service_seed():
+def test_gateway_dockerfile_does_not_copy_hypermesh_service_seed():
     text = ROUTER_DOCKERFILE.read_text()
     assert "hypermesh_service/seed.py" not in text
     assert "hypermesh_service/ticket.py" in text
@@ -62,7 +62,7 @@ def test_routes_reload_does_not_load_hypermesh_service_seed():
     assert routes.MARKETPLACE_TENANT_ID == MARKETPLACE_TENANT_ID
 
 
-def test_seed_watched_tenants_uses_in_router_marketplace_id(monkeypatch):
+def test_seed_watched_tenants_uses_in_gateway_marketplace_id(monkeypatch):
     sys.modules.pop("hypermesh_service.seed", None)
     from hypermesh_gateway_service.routes import seed_watched_tenants
     from hypermesh_gateway_service.tenants import MARKETPLACE_TENANT_ID

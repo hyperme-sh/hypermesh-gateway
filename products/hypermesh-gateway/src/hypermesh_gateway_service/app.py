@@ -19,7 +19,7 @@ from hypermesh_gateway_service.receipts import ReceiptStore, resolve_receipt_sto
 from hypermesh_gateway_service.routes import (
     openai_router,
     refresh_known_tenants,
-    router as hmr_router,
+    router as hmg_router,
     seed_watched_tenants,
 )
 from hypermesh_gateway_service.tickets import TicketCache
@@ -27,7 +27,7 @@ from hypermesh_gateway_service.tickets import TicketCache
 logger = get_logger(__name__)
 
 _OPENAPI_DESCRIPTION = (
-    "Hypermesh / Hyperme.sh Fyber router. Proxies renter chat to a leased "
+    "Hypermesh / Hyperme.sh Fyber gateway. Proxies renter chat to a leased "
     "instance over the standing WireGuard peer. Chat requires a locally "
     "verified portal JWT or a renter API key, plus a paid active ticket. "
     "After the ticket is issued, chat does not call Panopticon or Keycloak. "
@@ -41,7 +41,7 @@ _OPENAPI_DESCRIPTION = (
 def create_app(
     *,
     control_plane: ControlPlane | None = None,
-    router_service_secret: str | None = None,
+    gateway_service_secret: str | None = None,
     service_name: str | None = None,
     receipt_store: ReceiptStore | None = None,
     receipt_persist_path: str | None = None,
@@ -55,8 +55,8 @@ def create_app(
         seed_watched_tenants(app.state.ticket_cache)
         app.state.receipt_store = receipt_store or resolve_receipt_store(receipt_persist_path)
         app.state.classifier = classifier or resolve_classifier()
-        if router_service_secret is not None:
-            app.state.router_service_secret = router_service_secret
+        if gateway_service_secret is not None:
+            app.state.gateway_service_secret = gateway_service_secret
         refresh_s = float(os.environ.get("HYPERMESH_ASSIGNMENT_REFRESH_S", "30"))
         stop = asyncio.Event()
 
@@ -120,7 +120,7 @@ def create_app(
     app.openapi = custom_openapi
 
     app.include_router(health_router, prefix="/api/v1")
-    app.include_router(hmr_router, prefix="/api/v1")
+    app.include_router(hmg_router, prefix="/api/v1")
     app.include_router(openai_router)
     add_optional_service_cors(
         app,
@@ -132,7 +132,7 @@ def create_app(
         ),
     )
     logger.info(
-        "Hypermesh router: health + /api/v1/hypermesh-gateway + /v1/chat/completions + /v1/ir"
+        "Hypermesh gateway: health + /api/v1/hypermesh-gateway + /v1/chat/completions + /v1/ir"
     )
     return app
 

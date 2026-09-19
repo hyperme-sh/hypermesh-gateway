@@ -11,7 +11,7 @@ from hypermesh_gateway_service.chat import INSTANCE_NOT_READY, proxy_chat
 from hypermesh_gateway_service.control_plane import GatewayTunnel, HttpControlPlane, LeaseView
 from hypermesh_gateway_service.posture import require_chat_posture
 from hypermesh_gateway_service.tickets import CachedTicket, TicketCache, TicketPull
-from hypermesh_service.seed import FYBER_AGX_DEVICE_ID, FYBER_TEST_ROUTER_ID
+from hypermesh_service.seed import FYBER_AGX_DEVICE_ID, FYBER_TEST_GATEWAY_ID
 from hypermesh_service.ticket import TicketClaims, TicketNotReady, issue_ticket
 
 
@@ -19,8 +19,8 @@ def _renter(tenant_headers: dict[str, str]) -> dict[str, str]:
     return {**tenant_headers, "Authorization": "Bearer pk_test.renter-key"}
 
 
-def _router(tenant_headers: dict[str, str]) -> dict[str, str]:
-    return {**tenant_headers, "Authorization": "Bearer hm_rtr_test"}
+def _gateway(tenant_headers: dict[str, str]) -> dict[str, str]:
+    return {**tenant_headers, "Authorization": "Bearer hm_gw_test"}
 
 
 @pytest.mark.asyncio
@@ -38,15 +38,15 @@ async def test_health_and_openapi_has_no_host_ips(http_client):
 
 
 @pytest.mark.asyncio
-async def test_router_rejects_missing_service_cred(http_client, tenant_headers):
+async def test_gateway_rejects_missing_service_cred(http_client, tenant_headers):
     missing = await http_client.get("/api/v1/hypermesh-gateway/ready", headers=tenant_headers)
     assert missing.status_code == 401
     wrong = await http_client.get(
         "/api/v1/hypermesh-gateway/ready",
-        headers={**tenant_headers, "Authorization": "Bearer hm_rtr_nope"},
+        headers={**tenant_headers, "Authorization": "Bearer hm_gw_nope"},
     )
     assert wrong.status_code == 401
-    ok = await http_client.get("/api/v1/hypermesh-gateway/ready", headers=_router(tenant_headers))
+    ok = await http_client.get("/api/v1/hypermesh-gateway/ready", headers=_gateway(tenant_headers))
     assert ok.status_code == 200
 
 
@@ -63,7 +63,7 @@ def _signed_ticket(
         TicketClaims(
             lease_id=lease_id,
             device_id=FYBER_AGX_DEVICE_ID,
-            router_id=FYBER_TEST_ROUTER_ID,
+            gateway_id=FYBER_TEST_GATEWAY_ID,
             client_address=client_address,
             status="active",
             exp=exp,
@@ -74,7 +74,7 @@ def _signed_ticket(
         lease_id=lease_id,
         ticket=token,
         client_address=client_address,
-        assigned_router_id=FYBER_TEST_ROUTER_ID,
+        assigned_gateway_id=FYBER_TEST_GATEWAY_ID,
         status="active",
         exp=exp,
         device_id=FYBER_AGX_DEVICE_ID,
@@ -192,7 +192,7 @@ async def test_renter_chat_uses_cached_ticket_not_control_plane(
     control_plane.ticket_pull = TicketPull(tickets=[_signed_ticket(lease_id)], revoked_lease_ids=[])
     pulled = await http_client.post(
         "/api/v1/hypermesh-gateway/tunnels/apply",
-        headers=_router(tenant_headers),
+        headers=_gateway(tenant_headers),
     )
     assert pulled.status_code == 200
     assert control_plane.list_tunnels_calls == 1
@@ -256,7 +256,7 @@ async def test_inactive_cached_ticket_is_instance_not_ready(
             lease_id=lease_id,
             ticket="",
             client_address="",
-            assigned_router_id=FYBER_TEST_ROUTER_ID,
+            assigned_gateway_id=FYBER_TEST_GATEWAY_ID,
             status="revoked",
         ),
     )
@@ -270,7 +270,7 @@ async def test_inactive_cached_ticket_is_instance_not_ready(
 
 
 @pytest.mark.asyncio
-async def test_pull_tunnels_and_metrics_use_hm_rtr_(
+async def test_pull_tunnels_and_metrics_use_hm_gw_(
     http_client, tenant_headers, control_plane
 ):
     denied_pull = await http_client.get(
@@ -290,11 +290,11 @@ async def test_pull_tunnels_and_metrics_use_hm_rtr_(
 
     pulled = await http_client.get(
         "/api/v1/hypermesh-gateway/tunnels",
-        headers=_router(tenant_headers),
+        headers=_gateway(tenant_headers),
     )
     recorded = await http_client.post(
         "/api/v1/hypermesh-gateway/metrics",
-        headers=_router(tenant_headers),
+        headers=_gateway(tenant_headers),
         json={"bytes_in": 12, "bytes_out": 4, "handshake_count": 1},
     )
     assert pulled.status_code == 200
@@ -306,7 +306,7 @@ async def test_pull_tunnels_and_metrics_use_hm_rtr_(
 
 
 @pytest.mark.asyncio
-async def test_http_control_plane_pull_and_metrics_send_hm_rtr_(tenant_id, monkeypatch):
+async def test_http_control_plane_pull_and_metrics_send_hm_gw_(tenant_id, monkeypatch):
     import httpx
 
     captured: list[tuple[str, str, dict[str, str]]] = []
@@ -340,7 +340,7 @@ async def test_http_control_plane_pull_and_metrics_send_hm_rtr_(tenant_id, monke
             return DummyResponse(201)
 
     monkeypatch.setattr(httpx, "AsyncClient", DummyClient)
-    secret = "hm_rtr_test_plane_secret"
+    secret = "hm_gw_test_plane_secret"
     plane = HttpControlPlane("http://hypermesh-service:8000", secret)
     await plane.list_tunnels(tenant_id)
     await plane.list_tickets(tenant_id)
@@ -354,11 +354,11 @@ async def test_http_control_plane_pull_and_metrics_send_hm_rtr_(tenant_id, monke
     )
     assert len(captured) == 3
     assert captured[0][0] == "GET"
-    assert captured[0][1].endswith("/api/v1/hypermesh/router/tunnels")
+    assert captured[0][1].endswith("/api/v1/hypermesh/gateway/tunnels")
     assert captured[1][0] == "GET"
-    assert captured[1][1].endswith("/api/v1/hypermesh/router/tickets")
+    assert captured[1][1].endswith("/api/v1/hypermesh/gateway/tickets")
     assert captured[2][0] == "POST"
-    assert captured[2][1].endswith("/api/v1/hypermesh/router/metrics")
+    assert captured[2][1].endswith("/api/v1/hypermesh/gateway/metrics")
     for _method, url, headers in captured:
         assert headers["Authorization"] == f"Bearer {secret}"
         assert headers["X-Tenant-ID"] == str(tenant_id)
@@ -391,7 +391,7 @@ async def test_revoked_ticket_cannot_keep_session(
     control_plane.ticket_pull = TicketPull(tickets=[ticket], revoked_lease_ids=[])
     applied = await http_client.post(
         "/api/v1/hypermesh-gateway/tunnels/apply",
-        headers=_router(tenant_headers),
+        headers=_gateway(tenant_headers),
     )
     assert applied.status_code == 200
     _mock_runtime(app)
@@ -507,7 +507,7 @@ async def test_session_metrics_never_include_prompt_body(
             lease_id=cached.lease_id,
             ticket=cached.ticket,
             client_address=cached.client_address,
-            assigned_router_id=cached.assigned_router_id,
+            assigned_gateway_id=cached.assigned_gateway_id,
             status=cached.status,
             exp=cached.exp,
             device_id=cached.device_id,
@@ -671,7 +671,7 @@ async def test_tunnels_apply_uses_same_allocated_apply_path(
 
     pulled = await http_client.post(
         "/api/v1/hypermesh-gateway/tunnels/apply",
-        headers=_router(tenant_headers),
+        headers=_gateway(tenant_headers),
     )
 
     assert pulled.status_code == 200
@@ -779,7 +779,7 @@ async def test_http_control_plane_parses_path_b_state(tenant_id, monkeypatch):
                         "lease_id": str(uuid.uuid4()),
                         "ticket": "hm1.not-verified",
                         "client_address": "10.77.0.2/32",
-                        "assigned_router_id": str(FYBER_TEST_ROUTER_ID),
+                        "assigned_gateway_id": str(FYBER_TEST_GATEWAY_ID),
                         "status": "active",
                         "device_id": str(FYBER_AGX_DEVICE_ID),
                         "path_b_state": "green",
@@ -802,7 +802,7 @@ async def test_http_control_plane_parses_path_b_state(tenant_id, monkeypatch):
             return DummyResponse()
 
     monkeypatch.setattr(httpx, "AsyncClient", DummyClient)
-    plane = HttpControlPlane("http://hypermesh-service:8000", "hm_rtr_test")
+    plane = HttpControlPlane("http://hypermesh-service:8000", "hm_gw_test")
     pull = await plane.list_tickets(tenant_id)
     assert pull.tickets[0].path_b_state == "green"
     assert pull.tickets[0].device_id == FYBER_AGX_DEVICE_ID
@@ -897,7 +897,7 @@ async def test_chat_x_api_key_plus_paid_ticket(
 
 
 @pytest.mark.asyncio
-async def test_chat_rejects_host_and_router_secrets(
+async def test_chat_rejects_host_and_gateway_secrets(
     http_client, tenant_headers, control_plane, app, tenant_id
 ):
     from hypermesh_gateway_service.renter_auth import RENTER_AUTH_REQUIRED
@@ -905,7 +905,7 @@ async def test_chat_rejects_host_and_router_secrets(
     lease_id = uuid.uuid4()
     app.state.ticket_cache.put(tenant_id, _signed_ticket(lease_id))
     _mock_runtime(app)
-    for secret in ("hm_rtr_test", "hm_dev_box-secret", "hm1.payload.sig", "hm_site_cottage"):
+    for secret in ("hm_gw_test", "hm_dev_box-secret", "hm1.payload.sig", "hm_site_cottage"):
         refused = await http_client.post(
             "/v1/chat/completions",
             headers={**tenant_headers, "Authorization": f"Bearer {secret}"},

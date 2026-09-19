@@ -1,7 +1,7 @@
-"""HTTPS hop to Panopticon with hm_rtr_. Pull tickets/tunnels, post metrics.
+"""HTTPS hop to Panopticon with hm_gw_. Pull tickets/tunnels, post metrics.
 
 This is not the chat path. After a ticket is issued, chat uses the cached
-signed ticket and the standing WG peer. No WebSocket, no router mesh.
+signed ticket and the standing WG peer. No WebSocket, no gateway mesh.
 """
 
 from __future__ import annotations
@@ -60,7 +60,7 @@ class ControlPlane(Protocol):
 class HttpControlPlane:
     def __init__(self, base_url: str, service_secret: str) -> None:
         if not service_secret.strip():
-            raise ValueError("Router service credential required")
+            raise ValueError("Gateway service credential required")
         self._base = base_url.rstrip("/")
         self._secret = service_secret
 
@@ -73,11 +73,11 @@ class HttpControlPlane:
     async def list_tunnels(self, tenant_id: uuid.UUID) -> list[GatewayTunnel]:
         async with httpx.AsyncClient(timeout=15.0) as client:
             response = await client.get(
-                f"{self._base}/api/v1/hypermesh/router/tunnels",
+                f"{self._base}/api/v1/hypermesh/gateway/tunnels",
                 headers=self._headers(tenant_id),
             )
         if response.status_code == 401:
-            raise PermissionError("Router service credential required")
+            raise PermissionError("Gateway service credential required")
         response.raise_for_status()
         out: list[GatewayTunnel] = []
         for row in response.json():
@@ -99,11 +99,11 @@ class HttpControlPlane:
     async def list_tickets(self, tenant_id: uuid.UUID) -> TicketPull:
         async with httpx.AsyncClient(timeout=15.0) as client:
             response = await client.get(
-                f"{self._base}/api/v1/hypermesh/router/tickets",
+                f"{self._base}/api/v1/hypermesh/gateway/tickets",
                 headers=self._headers(tenant_id),
             )
         if response.status_code == 401:
-            raise PermissionError("Router service credential required")
+            raise PermissionError("Gateway service credential required")
         response.raise_for_status()
         body = response.json()
         if not isinstance(body, dict):
@@ -118,7 +118,7 @@ class HttpControlPlane:
                     lease_id=uuid.UUID(str(row["lease_id"])),
                     ticket=str(row["ticket"]),
                     client_address=str(row["client_address"]),
-                    assigned_router_id=uuid.UUID(str(row["assigned_router_id"])),
+                    assigned_gateway_id=uuid.UUID(str(row["assigned_gateway_id"])),
                     status=str(row.get("status") or "active"),
                     exp=exp,
                     device_id=uuid.UUID(str(device_raw)) if device_raw else None,
@@ -140,7 +140,7 @@ class HttpControlPlane:
     ) -> None:
         async with httpx.AsyncClient(timeout=15.0) as client:
             response = await client.post(
-                f"{self._base}/api/v1/hypermesh/router/metrics",
+                f"{self._base}/api/v1/hypermesh/gateway/metrics",
                 headers=self._headers(tenant_id),
                 json={
                     "tunnel_id": str(tunnel_id) if tunnel_id else None,
@@ -151,7 +151,7 @@ class HttpControlPlane:
                 },
             )
         if response.status_code == 401:
-            raise PermissionError("Router service credential required")
+            raise PermissionError("Gateway service credential required")
         response.raise_for_status()
 
 
@@ -161,7 +161,7 @@ class FakeControlPlane:
         *,
         leases: dict[uuid.UUID, LeaseView] | None = None,
         tunnels: list[GatewayTunnel] | None = None,
-        service_secret: str = "hm_rtr_test",
+        service_secret: str = "hm_gw_test",
     ) -> None:
         self.leases = leases or {}
         self.tunnels = tunnels or []
@@ -181,13 +181,13 @@ class FakeControlPlane:
     async def list_tunnels(self, tenant_id: uuid.UUID) -> list[GatewayTunnel]:
         self.list_tunnels_calls += 1
         if self.require_secret and not self.service_secret:
-            raise PermissionError("Router service credential required")
+            raise PermissionError("Gateway service credential required")
         return list(self.tunnels)
 
     async def list_tickets(self, tenant_id: uuid.UUID) -> TicketPull:
         self.list_tickets_calls += 1
         if self.require_secret and not self.service_secret:
-            raise PermissionError("Router service credential required")
+            raise PermissionError("Gateway service credential required")
         return TicketPull(
             tickets=list(self.ticket_pull.tickets),
             revoked_lease_ids=list(self.ticket_pull.revoked_lease_ids),
@@ -205,7 +205,7 @@ class FakeControlPlane:
     ) -> None:
         self.post_metrics_calls += 1
         if self.require_secret and not self.service_secret:
-            raise PermissionError("Router service credential required")
+            raise PermissionError("Gateway service credential required")
         self.metrics.append(
             {
                 "tenant_id": tenant_id,

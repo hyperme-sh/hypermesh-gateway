@@ -1,4 +1,4 @@
-"""Hermetic router chat synthetic: ticket pull → mock host completions.
+"""Hermetic gateway chat synthetic: ticket pull → mock host completions.
 
 Plane ``POST /renter/chat/completions`` is not the product. This suite
 proxies one completion to ``http://127.0.0.1:<port>/v1/chat/completions``
@@ -16,7 +16,7 @@ import pytest
 from hypermesh_gateway_service.chat import CHAT_PORT_ENV, INSTANCE_NOT_READY
 from hypermesh_gateway_service.control_plane import GatewayTunnel
 from hypermesh_gateway_service.tickets import CachedTicket, TicketPull
-from hypermesh_service.seed import FYBER_AGX_DEVICE_ID, FYBER_TEST_ROUTER_ID
+from hypermesh_service.seed import FYBER_AGX_DEVICE_ID, FYBER_TEST_GATEWAY_ID
 from hypermesh_service.ticket import TicketClaims, issue_ticket
 from mock_host import MOCK_COMPLETION, MockHost
 
@@ -31,8 +31,8 @@ def _renter(tenant_headers: dict[str, str]) -> dict[str, str]:
     return {**tenant_headers, "Authorization": "Bearer pk_test.renter-key"}
 
 
-def _router(tenant_headers: dict[str, str]) -> dict[str, str]:
-    return {**tenant_headers, "Authorization": "Bearer hm_rtr_test"}
+def _gateway(tenant_headers: dict[str, str]) -> dict[str, str]:
+    return {**tenant_headers, "Authorization": "Bearer hm_gw_test"}
 
 
 def _signed_ticket(
@@ -46,7 +46,7 @@ def _signed_ticket(
         TicketClaims(
             lease_id=lease_id,
             device_id=FYBER_AGX_DEVICE_ID,
-            router_id=FYBER_TEST_ROUTER_ID,
+            gateway_id=FYBER_TEST_GATEWAY_ID,
             client_address=client_address,
             status="active",
             exp=exp,
@@ -57,7 +57,7 @@ def _signed_ticket(
         lease_id=lease_id,
         ticket=token,
         client_address=client_address,
-        assigned_router_id=FYBER_TEST_ROUTER_ID,
+        assigned_gateway_id=FYBER_TEST_GATEWAY_ID,
         status="active",
         exp=exp,
         device_id=FYBER_AGX_DEVICE_ID,
@@ -81,12 +81,12 @@ def _allocated_tunnel(lease_id: uuid.UUID, client_address: str) -> GatewayTunnel
 
 
 def _plane_ticket_fixture(ticket: CachedTicket) -> dict:
-    """Recorded GET /router/tickets row. Same lock fields as the plane."""
+    """Recorded GET /gateway/tickets row. Same lock fields as the plane."""
 
     return {
         "lease_id": str(ticket.lease_id),
         "device_id": str(ticket.device_id),
-        "assigned_router_id": str(ticket.assigned_router_id),
+        "assigned_gateway_id": str(ticket.assigned_gateway_id),
         "client_address": ticket.client_address,
         "status": ticket.status,
         "ticket": ticket.ticket,
@@ -94,7 +94,7 @@ def _plane_ticket_fixture(ticket: CachedTicket) -> dict:
     }
 
 
-async def test_synthetic_router_chat_proxies_mock_host(
+async def test_synthetic_gateway_chat_proxies_mock_host(
     http_client, tenant_headers, control_plane, monkeypatch, caplog
 ):
     host = MockHost().start()
@@ -106,7 +106,7 @@ async def test_synthetic_router_chat_proxies_mock_host(
         fixture = _plane_ticket_fixture(ticket)
         assert fixture["lease_id"] == str(lease_id)
         assert fixture["device_id"] == str(FYBER_AGX_DEVICE_ID)
-        assert fixture["assigned_router_id"] == str(FYBER_TEST_ROUTER_ID)
+        assert fixture["assigned_gateway_id"] == str(FYBER_TEST_GATEWAY_ID)
         assert fixture["client_address"] == "127.0.0.1/32"
         assert "peer_private_key" not in fixture
 
@@ -114,7 +114,7 @@ async def test_synthetic_router_chat_proxies_mock_host(
         control_plane.ticket_pull = TicketPull(tickets=[ticket], revoked_lease_ids=[])
         applied = await http_client.post(
             "/api/v1/hypermesh-gateway/tunnels/apply",
-            headers=_router(tenant_headers),
+            headers=_gateway(tenant_headers),
         )
         assert applied.status_code == 200, applied.text
         assert control_plane.list_tickets_calls == 1
@@ -150,14 +150,14 @@ async def test_synthetic_router_chat_proxies_mock_host(
         host.stop()
 
 
-async def test_synthetic_router_chat_not_ready_without_ticket(
+async def test_synthetic_gateway_chat_not_ready_without_ticket(
     http_client, tenant_headers, control_plane
 ):
     lease_id = uuid.uuid4()
     control_plane.ticket_pull = TicketPull(tickets=[], revoked_lease_ids=[])
     await http_client.post(
         "/api/v1/hypermesh-gateway/tunnels/apply",
-        headers=_router(tenant_headers),
+        headers=_gateway(tenant_headers),
     )
     refused = await http_client.post(
         "/v1/chat/completions",

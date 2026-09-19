@@ -4,7 +4,7 @@ Portal humans: OIDC JWT validated locally (cached JWKS, or the API-key
 exchange JWT). Agents: API key. A paid, active, signed lease ticket is
 still required. Purpose lives on that ticket, not here. Completions do
 not call Keycloak or Panopticon. Not an IdP. Not a fourth identity:
-renter key / JWT, host device_secret, router hm_rtr_, or site hm_site_.
+renter key / JWT, host device_secret, gateway hm_gw_, or site hm_site_.
 
 API key is format-only on the completions path: the signed ticket carries the
 tenant and the lease, so a forged key reaches nothing. Doors that read
@@ -25,7 +25,7 @@ from fastapi import HTTPException, Request
 logger = logging.getLogger(__name__)
 
 DEVICE_SECRET_HEAD = "hm_dev_"
-ROUTER_SECRET_HEAD = "hm_rtr_"
+GATEWAY_SECRET_HEAD = "hm_gw_"
 SITE_TOKEN_HEAD = "hm_site_"
 TICKET_PREFIX = "hm1."
 RENTER_AUTH_REQUIRED = "API key or access token required"
@@ -51,14 +51,14 @@ class JwtValidator(Protocol):
 
 
 def looks_like_jwt(token: str) -> bool:
-    if token.startswith((ROUTER_SECRET_HEAD, DEVICE_SECRET_HEAD, SITE_TOKEN_HEAD, TICKET_PREFIX)):
+    if token.startswith((GATEWAY_SECRET_HEAD, DEVICE_SECRET_HEAD, SITE_TOKEN_HEAD, TICKET_PREFIX)):
         return False
     parts = token.split(".")
     return len(parts) == 3 and all(parts)
 
 
 def looks_like_api_key(token: str) -> bool:
-    if token.startswith((ROUTER_SECRET_HEAD, DEVICE_SECRET_HEAD, SITE_TOKEN_HEAD, TICKET_PREFIX)):
+    if token.startswith((GATEWAY_SECRET_HEAD, DEVICE_SECRET_HEAD, SITE_TOKEN_HEAD, TICKET_PREFIX)):
         return False
     if looks_like_jwt(token):
         return False
@@ -86,7 +86,7 @@ def _api_key_header(request: Request) -> str | None:
 
 
 def _forbidden_identity(token: str) -> bool:
-    return token.startswith((ROUTER_SECRET_HEAD, DEVICE_SECRET_HEAD, SITE_TOKEN_HEAD, TICKET_PREFIX))
+    return token.startswith((GATEWAY_SECRET_HEAD, DEVICE_SECRET_HEAD, SITE_TOKEN_HEAD, TICKET_PREFIX))
 
 
 def verify_jwt_locally(

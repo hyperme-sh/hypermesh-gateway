@@ -70,8 +70,8 @@ def test_looks_like_jwt_and_api_key_do_not_invent_identities():
     assert looks_like_jwt("pk_test.renter-key") is False
     assert looks_like_jwt("aaa.bbb.ccc") is True
     assert looks_like_api_key("aaa.bbb.ccc") is False
-    assert looks_like_jwt("hm_rtr_test") is False
-    assert looks_like_api_key("hm_rtr_test") is False
+    assert looks_like_jwt("hm_gw_test") is False
+    assert looks_like_api_key("hm_gw_test") is False
     assert looks_like_jwt("hm_dev_box-secret") is False
     assert looks_like_api_key("hm_dev_box-secret") is False
     assert looks_like_jwt("hm1.payload.sig") is False
@@ -187,13 +187,13 @@ def test_require_renter_grant_rejects_wrong_identities_and_bad_jwt():
     validator = _AcceptJwt("good.jwt.token")
     cases = [
         _request(),
-        _request(authorization="Bearer hm_rtr_test"),
+        _request(authorization="Bearer hm_gw_test"),
         _request(authorization="Bearer hm_dev_box-secret"),
         _request(authorization="Bearer hm1.payload.sig"),
         _request(authorization="Bearer hm_site_cottage"),
         _request(authorization="Bearer noperiod"),
         _request(authorization="Bearer bad.jwt.token", validator=validator),
-        _request(api_key="hm_rtr_test"),
+        _request(api_key="hm_gw_test"),
     ]
     for request in cases:
         with pytest.raises(RenterUnauthorized) as exc:

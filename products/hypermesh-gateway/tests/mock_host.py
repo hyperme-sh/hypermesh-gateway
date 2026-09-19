@@ -1,4 +1,4 @@
-"""Hermetic mock host for router chat proxy tests.
+"""Hermetic mock host for gateway chat proxy tests.
 
 Binds ``http://127.0.0.1:<port>/v1/chat/completions``. No WireGuard, no AGX.
 Does not log or retain the prompt body.
@@ -13,13 +13,13 @@ from typing import Any
 
 
 MOCK_COMPLETION = {
-    "id": "cmpl-synthetic-router",
+    "id": "cmpl-synthetic-gateway",
     "object": "chat.completion",
     "model": "llama-3.1-8b-q4",
     "choices": [
         {
             "index": 0,
-            "message": {"role": "assistant", "content": "synthetic-router-ok"},
+            "message": {"role": "assistant", "content": "synthetic-gateway-ok"},
             "finish_reason": "stop",
         }
     ],

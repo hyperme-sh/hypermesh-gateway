@@ -203,7 +203,7 @@ async def test_ir_door_uses_injected_classifier_without_proxy(
     monkeypatch.setenv("HYPERMESH_TICKET_HMAC_KEY", "test-plane-hypermesh-ticket-hmac")
     app = create_app(
         control_plane=control_plane,
-        router_service_secret="hm_rtr_test",
+        gateway_service_secret="hm_gw_test",
         classifier=_HoldAllClassifier(),
     )
     lease_id = uuid.uuid4()
@@ -300,7 +300,7 @@ async def test_ir_door_receipts_reload_from_file(
     monkeypatch.setenv("HYPERMESH_IR_RECEIPT_PATH", str(path))
     first_app = create_app(
         control_plane=control_plane,
-        router_service_secret="hm_rtr_test",
+        gateway_service_secret="hm_gw_test",
     )
     lease_id = uuid.uuid4()
     prompt = "secret prompt must never be persisted"
@@ -324,7 +324,7 @@ async def test_ir_door_receipts_reload_from_file(
 
     bounced = create_app(
         control_plane=control_plane,
-        router_service_secret="hm_rtr_test",
+        gateway_service_secret="hm_gw_test",
     )
     async with LifespanManager(bounced):
         bounced.state.ticket_cache.put(tenant_id, _signed_ticket(lease_id, purpose="ir"))

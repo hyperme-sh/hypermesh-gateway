@@ -1,6 +1,6 @@
 """OpenAI-shaped renter chat proxy. Never log prompts or keys.
 
-Chat path is renter HTTPS → this router → the host over the standing
+Chat path is renter HTTPS → this gateway → the host over the standing
 WireGuard peer. No Panopticon HTTP, no get_lease, no Service Bus.
 """
 

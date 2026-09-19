@@ -1,4 +1,4 @@
-"""Cached signed lease tickets learned from hm_rtr_ GET /router/tickets.
+"""Cached signed lease tickets learned from hm_gw_ GET /gateway/tickets.
 
 Panopticon is the broker. After a ticket is issued, chat uses this cache
 and honor_ticket. Do not re-ask the control plane per completion.
@@ -21,7 +21,7 @@ class CachedTicket:
     lease_id: uuid.UUID
     ticket: str
     client_address: str
-    assigned_router_id: uuid.UUID
+    assigned_gateway_id: uuid.UUID
     status: str
     exp: datetime | None = None
     device_id: uuid.UUID | None = None
@@ -101,7 +101,7 @@ class TicketCache:
             raise TicketNotReady()
         return honor_ticket(
             ticket.ticket,
-            router_id=ticket.assigned_router_id,
+            gateway_id=ticket.assigned_gateway_id,
             revoked_lease_ids=self.revoked_lease_ids(tenant_id),
         )
 

@@ -108,7 +108,7 @@ async def refresh_assignments(
     cache: TicketCache,
     tenant_id: uuid.UUID,
 ) -> list[GatewayTunnel]:
-    """hm_rtr_ pull. Updates revoke / Path B cache. Does not flap the host peer."""
+    """hm_gw_ pull. Updates revoke / Path B cache. Does not flap the host peer."""
 
     tunnels = await plane.list_tunnels(tenant_id)
     pull = await plane.list_tickets(tenant_id)
@@ -159,17 +159,17 @@ def _result_bytes(payload: dict[str, Any]) -> int:
 
 def _require_service_cred(request: Request) -> str:
     expected = os.environ.get("HYPERMESH_GATEWAY_SERVICE_SECRET", "").strip()
-    override = getattr(request.app.state, "router_service_secret", None)
+    override = getattr(request.app.state, "gateway_service_secret", None)
     if override is not None:
         expected = str(override)
     raw = request.headers.get("Authorization")
     if not raw:
-        raise HTTPException(status_code=401, detail="Router service credential required")
+        raise HTTPException(status_code=401, detail="Gateway service credential required")
     scheme, _, token = raw.partition(" ")
     if scheme.lower() != "bearer" or not token.strip():
-        raise HTTPException(status_code=401, detail="Router service credential required")
+        raise HTTPException(status_code=401, detail="Gateway service credential required")
     if not expected or token.strip() != expected:
-        raise HTTPException(status_code=401, detail="Invalid router service credential")
+        raise HTTPException(status_code=401, detail="Invalid gateway service credential")
     return token.strip()
 
 

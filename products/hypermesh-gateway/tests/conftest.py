@@ -46,7 +46,7 @@ def tenant_headers(tenant_id: uuid.UUID) -> dict[str, str]:
 
 @pytest.fixture
 def control_plane() -> FakeControlPlane:
-    return FakeControlPlane(service_secret="hm_rtr_test")
+    return FakeControlPlane(service_secret="hm_gw_test")
 
 
 @pytest.fixture
@@ -56,7 +56,7 @@ def app(control_plane, monkeypatch):
     monkeypatch.setenv("HYPERMESH_TICKET_HMAC_KEY", "test-plane-hypermesh-ticket-hmac")
     return create_app(
         control_plane=control_plane,
-        router_service_secret="hm_rtr_test",
+        gateway_service_secret="hm_gw_test",
     )
 
 

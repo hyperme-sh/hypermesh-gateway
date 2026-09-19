@@ -1,6 +1,6 @@
 """Tunnel/session metrics to Panopticon. No prompt body. Ever.
 
-Completions stay on this router. Control plane gets ids and counters only.
+Completions stay on this gateway. Control plane gets ids and counters only.
 """
 
 from __future__ import annotations
