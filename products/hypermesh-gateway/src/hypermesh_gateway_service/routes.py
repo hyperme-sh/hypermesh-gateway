@@ -11,6 +11,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Request, status
 from pydantic import BaseModel, Field
 
+from api.common.internal_token import internal_token_matches
 from hypermesh_gateway_service.chat import ChatCompletionRequest, proxy_chat
 from hypermesh_gateway_service.control_plane import ControlPlane, GatewayTunnel
 from hypermesh_gateway_service.metrics import report_session_metrics
@@ -168,7 +169,8 @@ def _require_service_cred(request: Request) -> str:
     scheme, _, token = raw.partition(" ")
     if scheme.lower() != "bearer" or not token.strip():
         raise HTTPException(status_code=401, detail="Gateway service credential required")
-    if not expected or token.strip() != expected:
+    # Constant time: these routes are reachable on the public chat host.
+    if not internal_token_matches(token.strip(), expected):
         raise HTTPException(status_code=401, detail="Invalid gateway service credential")
     return token.strip()
 

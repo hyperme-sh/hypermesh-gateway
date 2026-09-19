@@ -50,6 +50,22 @@ async def test_gateway_rejects_missing_service_cred(http_client, tenant_headers)
     assert ok.status_code == 200
 
 
+@pytest.mark.asyncio
+async def test_router_denies_when_no_service_cred_is_configured(
+    http_client, tenant_headers, app, monkeypatch
+):
+    """Unconfigured must deny, not accept whatever the caller sent."""
+
+    monkeypatch.delenv("HYPERMESH_ROUTER_SERVICE_SECRET", raising=False)
+    app.state.router_service_secret = ""
+    for sent in ("", "hm_rtr_test", "anything"):
+        refused = await http_client.get(
+            "/api/v1/hypermesh-router/ready",
+            headers={**tenant_headers, "Authorization": f"Bearer {sent}"},
+        )
+        assert refused.status_code == 401, f"accepted {sent!r} with no secret configured"
+
+
 def _signed_ticket(
     lease_id: uuid.UUID,
     *,
