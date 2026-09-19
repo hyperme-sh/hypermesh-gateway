@@ -1,0 +1,71 @@
+from __future__ import annotations
+
+import uuid
+
+import pytest
+
+from hypermesh_gateway_service.app import create_app
+from hypermesh_gateway_service.control_plane import FakeControlPlane, GatewayTunnel, LeaseView
+from hypermesh_gateway_service.tenants import MARKETPLACE_TENANT_ID
+
+
+@pytest.fixture(autouse=True)
+def _clear_ir_taxonomy_override(monkeypatch):
+    monkeypatch.delenv("HYPERMESH_IR_TAXONOMY_PACK", raising=False)
+
+
+def stub_api_key_validator(answers: uuid.UUID | None):
+    """Stand in for api-keys-service. answers is the tenant it says owns the key.
+
+    None means it refused the key. Assign to app.state.api_key_validator.
+    """
+
+    async def validate(
+        *,
+        base_url: str,
+        api_key: str,
+        tenant_id: uuid.UUID,
+        timeout_s: float = 5.0,
+    ) -> dict | None:
+        if answers is None:
+            return None
+        return {"valid": True, "tenant_id": str(answers), "scopes": [], "purpose": "renter"}
+
+    return validate
+
+
+@pytest.fixture
+def tenant_id() -> uuid.UUID:
+    return MARKETPLACE_TENANT_ID
+
+
+@pytest.fixture
+def tenant_headers(tenant_id: uuid.UUID) -> dict[str, str]:
+    return {"X-Tenant-ID": str(tenant_id)}
+
+
+@pytest.fixture
+def control_plane() -> FakeControlPlane:
+    return FakeControlPlane(service_secret="hm_rtr_test")
+
+
+@pytest.fixture
+def app(control_plane, monkeypatch):
+    monkeypatch.setenv("HYPERMESH_WG_APPLY", "0")
+    monkeypatch.setenv("HYPERMESH_ASSIGNMENT_REFRESH_S", "0")
+    monkeypatch.setenv("HYPERMESH_TICKET_HMAC_KEY", "test-plane-hypermesh-ticket-hmac")
+    return create_app(
+        control_plane=control_plane,
+        router_service_secret="hm_rtr_test",
+    )
+
+
+@pytest.fixture
+async def http_client(app):
+    import httpx
+    from asgi_lifespan import LifespanManager
+
+    async with LifespanManager(app):
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            yield client

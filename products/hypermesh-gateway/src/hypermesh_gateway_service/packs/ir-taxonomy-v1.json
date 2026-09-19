@@ -1,0 +1,189 @@
+{
+  "version": "ir-taxonomy-v1",
+  "description": "Small-set authorized security prompt types on the opt-in IR door. Not a detector. Not a CASB.",
+  "default": {
+    "class": "out_of_scope",
+    "disposition": "hold"
+  },
+  "classes": [
+    {
+      "id": "incident_triage",
+      "disposition": "allow",
+      "label": "Incident triage"
+    },
+    {
+      "id": "vuln_review",
+      "disposition": "allow",
+      "label": "Vulnerability review"
+    },
+    {
+      "id": "malware_analysis",
+      "disposition": "allow",
+      "label": "Malware analysis"
+    },
+    {
+      "id": "policy_review",
+      "disposition": "allow",
+      "label": "Policy review"
+    },
+    {
+      "id": "out_of_scope",
+      "disposition": "hold",
+      "label": "Out of scope"
+    }
+  ],
+  "rules": [
+    {
+      "id": "hold.instruction_override",
+      "class": "out_of_scope",
+      "priority": 0,
+      "match": {
+        "any": [
+          {"phrase": "ignore previous"},
+          {"phrase": "ignore all previous"},
+          {"token": "jailbreak"},
+          {"phrase": "dan mode"},
+          {"phrase": "do anything now"},
+          {"phrase": "developer mode"},
+          {"phrase": "bypass safety"},
+          {"phrase": "bypass filter"},
+          {"phrase": "unfiltered model"}
+        ]
+      }
+    },
+    {
+      "id": "hold.exploit_for_hire",
+      "class": "out_of_scope",
+      "priority": 0,
+      "match": {
+        "any": [
+          {"phrase": "write ransomware"},
+          {"phrase": "generate ransomware"},
+          {"phrase": "write a worm"},
+          {"phrase": "generate malware for"},
+          {"phrase": "zero-day exploit"},
+          {"phrase": "exploit pack"},
+          {"phrase": "c2 implant"},
+          {"phrase": "phishing kit"}
+        ]
+      }
+    },
+    {
+      "id": "allow.incident_triage",
+      "class": "incident_triage",
+      "priority": 10,
+      "match": {
+        "any": [
+          {
+            "all": [
+              {"token": "incident"},
+              {"any": [{"token": "triage"}, {"token": "response"}]}
+            ]
+          },
+          {
+            "all": [
+              {"token": "alert"},
+              {"any": [{"token": "triage"}, {"token": "siem"}]}
+            ]
+          },
+          {"phrase": "indicator of compromise"},
+          {"phrase": "indicators of compromise"},
+          {
+            "all": [
+              {"token": "containment"},
+              {"token": "step"}
+            ]
+          },
+          {
+            "all": [
+              {"token": "ioc"},
+              {"any": [{"token": "hash"}, {"token": "list"}]}
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "allow.vuln_review",
+      "class": "vuln_review",
+      "priority": 10,
+      "match": {
+        "any": [
+          {"regex": "\\bcve-\\d{4}-\\d+\\b"},
+          {
+            "all": [
+              {"token": "vulnerability"},
+              {"any": [{"token": "review"}, {"token": "assessment"}]}
+            ]
+          },
+          {"phrase": "authorized assessment"},
+          {"phrase": "patch advisory"},
+          {
+            "all": [
+              {"token": "finding"},
+              {"token": "review"}
+            ]
+          },
+          {"phrase": "security finding"}
+        ]
+      }
+    },
+    {
+      "id": "allow.malware_analysis",
+      "class": "malware_analysis",
+      "priority": 10,
+      "match": {
+        "any": [
+          {
+            "all": [
+              {"token": "malware"},
+              {
+                "any": [
+                  {"token": "analysis"},
+                  {"token": "sample"},
+                  {"token": "yara"},
+                  {"token": "sandbox"},
+                  {"token": "hash"},
+                  {"token": "detonate"}
+                ]
+              }
+            ]
+          },
+          {"phrase": "yara rule"},
+          {"phrase": "sandbox report"},
+          {"phrase": "sample hash"},
+          {"phrase": "detonate the sample"}
+        ]
+      }
+    },
+    {
+      "id": "allow.policy_review",
+      "class": "policy_review",
+      "priority": 10,
+      "match": {
+        "any": [
+          {"phrase": "policy review"},
+          {"phrase": "control mapping"},
+          {"phrase": "security policy"},
+          {
+            "all": [
+              {
+                "any": [
+                  {"phrase": "nist 800"},
+                  {"phrase": "iso 27001"},
+                  {"phrase": "soc 2"}
+                ]
+              },
+              {
+                "any": [
+                  {"token": "policy"},
+                  {"token": "control"}
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}
