@@ -1,10 +1,10 @@
-# IR classifier v0 (Fyber router)
+# IR classifier v0 (Fyber gateway)
 
 Integrator note for the opt-in IR door on `products/hypermesh-gateway`.
 In-repo only. **Not** a detector. **Not** a CASB. **Not** AIuditor
 launch marketing. Do not copy this onto hyperme.sh.
 
-Locks: FyberLabs/hypermesh-docs `router-door.md` + `router-roadmap.md` slice 4.
+Locks: FyberLabs/hypermesh-docs `gateway-door.md` + `gateway-roadmap.md` slice 4.
 
 ## What this is
 
