@@ -88,8 +88,9 @@ def sanitize_receipt_payload(payload: dict[str, Any]) -> dict[str, str]:
 class ReceiptStore:
     """Tenant-scoped receipts on this door. Not the product event bus.
 
-    Optional JSON file persist so a bounce does not drop customer receipts.
+    JSON file persist so a bounce does not drop customer receipts.
     The file holds sanitized export rows only — never prompt or completion bodies.
+    Opt out with HYPERMESH_IR_RECEIPT_PATH=memory.
     """
 
     def __init__(self, persist_path: str | os.PathLike[str] | None = None) -> None:
@@ -187,8 +188,23 @@ class ReceiptStore:
         tmp.replace(self._path)
 
 
+DEFAULT_IR_RECEIPT_NAME = "ir-receipts.json"
+_MEMORY_SENTINELS = frozenset({"", "memory", "none", "off"})
+
+
+def default_ir_receipt_path() -> Path:
+    """Door-local file. Override the directory with HYPERMESH_DATA_DIR."""
+
+    root = (os.environ.get("HYPERMESH_DATA_DIR") or "").strip()
+    base = Path(root) if root else Path("var/lib/hypermesh")
+    return base / DEFAULT_IR_RECEIPT_NAME
+
+
 def resolve_receipt_store(path: str | os.PathLike[str] | None = None) -> ReceiptStore:
-    persist = path if path is not None else os.environ.get("HYPERMESH_IR_RECEIPT_PATH")
-    if persist is not None and str(persist).strip() == "":
-        persist = None
-    return ReceiptStore(persist_path=persist)
+    raw = path if path is not None else os.environ.get("HYPERMESH_IR_RECEIPT_PATH")
+    if raw is None:
+        return ReceiptStore(persist_path=default_ir_receipt_path())
+    text = str(raw).strip()
+    if text.lower() in _MEMORY_SENTINELS:
+        return ReceiptStore(persist_path=None)
+    return ReceiptStore(persist_path=text)
