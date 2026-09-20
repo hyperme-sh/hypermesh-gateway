@@ -957,9 +957,9 @@ async def test_chat_rejects_host_and_gateway_secrets(
 
 @pytest.mark.asyncio
 async def test_jwt_without_paid_ticket_is_instance_not_ready(
-    http_client, tenant_headers, control_plane, app
+    http_client, tenant_headers, control_plane, app, tenant_id
 ):
-    validator = _AcceptJwt("portal.jwt.token")
+    validator = _AcceptJwt("portal.jwt.token", tenant_id)
     app.state.renter_jwt_validator = validator
     refused = await http_client.post(
         "/v1/chat/completions",

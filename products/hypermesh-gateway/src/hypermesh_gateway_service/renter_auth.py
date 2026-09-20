@@ -142,12 +142,15 @@ def _subject_from_api_key(token: str) -> str:
 
 
 def _tenant_matches(claims: dict[str, Any], tenant_id: str | None) -> bool:
+    """Missing tenant claim is a miss. A header-only tenant is not a grant."""
+
     if not tenant_id:
-        return True
-    raw = claims.get(TENANT_CLAIM) or claims.get("tenant_id")
-    if raw is None:
-        return True
-    return str(raw) == tenant_id
+        raw = claims.get(TENANT_CLAIM) or claims.get("tenant_id")
+        return raw is not None and str(raw).strip() != ""
+    try:
+        return _tenant_claim_is(claims, uuid.UUID(str(tenant_id)))
+    except (ValueError, AttributeError, TypeError):
+        return False
 
 
 def require_renter_grant(request: Request) -> RenterGrant:
