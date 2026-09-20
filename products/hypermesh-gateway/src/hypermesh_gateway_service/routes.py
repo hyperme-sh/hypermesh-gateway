@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import logging
 import os
 import uuid
@@ -10,9 +9,10 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request, status
 from pydantic import BaseModel, Field
+from starlette.responses import StreamingResponse
 
 from api.common.internal_token import internal_token_matches
-from hypermesh_gateway_service.chat import ChatCompletionRequest, proxy_chat
+from hypermesh_gateway_service.chat import ChatCompletionRequest, ProxiedChat, proxy_chat
 from hypermesh_gateway_service.control_plane import ControlPlane, GatewayTunnel
 from hypermesh_gateway_service.metrics import report_session_metrics
 from hypermesh_gateway_service.posture import require_chat_posture
@@ -157,10 +157,26 @@ def _content_length(request: Request) -> int:
     return 0
 
 
-def _result_bytes(payload: dict[str, Any]) -> int:
-    """Response size only. The body is not copied into the metrics POST."""
+def _stream_chat(
+    proxied: ProxiedChat,
+    *,
+    after_bytes: Any | None = None,
+) -> StreamingResponse:
+    """Pass host bytes through. Do not parse or buffer the completion."""
 
-    return len(json.dumps(payload, separators=(",", ":")).encode("utf-8"))
+    async def chunks():
+        try:
+            async for chunk in proxied.iter_bytes():
+                yield chunk
+        finally:
+            if after_bytes is not None:
+                await after_bytes(proxied.bytes_out)
+
+    return StreamingResponse(
+        chunks(),
+        media_type=proxied.media_type,
+        headers={"x-accel-buffering": "no"},
+    )
 
 
 def _require_service_cred(request: Request) -> str:
@@ -272,7 +288,7 @@ async def post_metrics(request: Request, body: MetricsBody) -> dict[str, str]:
     return {"status": "recorded"}
 
 
-async def _chat(request: Request, body: ChatCompletionRequest) -> dict[str, Any]:
+async def _chat(request: Request, body: ChatCompletionRequest) -> StreamingResponse:
     grant = require_renter_grant(request)
     tenant_id = _tenant_id(request)
     lease_id = _lease_id(request, body)
@@ -291,26 +307,29 @@ async def _chat(request: Request, body: ChatCompletionRequest) -> dict[str, Any]
         raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
     _bind_renter_to_ticket(request, grant, claims, tenant_id, cache)
     runtime = getattr(request.app.state, "runtime_client", None)
-    result = await proxy_chat(
+    proxied = await proxy_chat(
         lease_id=lease_id,
         payload=body.model_dump(mode="json"),
         client_address=claims.client_address,
         runtime_client=runtime,
     )
     rx, tx, handshakes = peer_counters(peer_key or "")
-    await report_session_metrics(
-        _control(request),
-        tenant_id,
-        tunnel_id=cached.tunnel_id if cached else None,
-        lease_id=lease_id,
-        bytes_in=_content_length(request) or rx,
-        bytes_out=_result_bytes(result) or tx,
-        handshake_count=handshakes,
-    )
-    return result
+
+    async def _meter(bytes_out: int) -> None:
+        await report_session_metrics(
+            _control(request),
+            tenant_id,
+            tunnel_id=cached.tunnel_id if cached else None,
+            lease_id=lease_id,
+            bytes_in=_content_length(request) or rx,
+            bytes_out=bytes_out or tx,
+            handshake_count=handshakes,
+        )
+
+    return _stream_chat(proxied, after_bytes=_meter)
 
 
-async def _ir_chat(request: Request, body: ChatCompletionRequest) -> dict[str, Any]:
+async def _ir_chat(request: Request, body: ChatCompletionRequest):
     """Opt-in IR door. Classify. Allow or hold. Receipt stays on this door."""
 
     grant = require_renter_grant(request)
@@ -353,7 +372,7 @@ async def _ir_chat(request: Request, body: ChatCompletionRequest) -> dict[str, A
         return {"decision": "hold", "receipt": receipt.as_export()}
     runtime = getattr(request.app.state, "runtime_client", None)
     try:
-        result = await proxy_chat(
+        proxied = await proxy_chat(
             lease_id=lease_id,
             payload=body.model_dump(mode="json"),
             client_address=claims.client_address,
@@ -370,7 +389,7 @@ async def _ir_chat(request: Request, body: ChatCompletionRequest) -> dict[str, A
             decision="allow",
         )
         raise
-    receipt = store.record(
+    store.record(
         tenant_id=tenant_id,
         lease_id=lease_id,
         who=grant.subject,
@@ -380,17 +399,19 @@ async def _ir_chat(request: Request, body: ChatCompletionRequest) -> dict[str, A
         decision="allow",
     )
     rx, tx, handshakes = peer_counters(peer_key or "")
-    await report_session_metrics(
-        _control(request),
-        tenant_id,
-        tunnel_id=cached.tunnel_id if cached else None,
-        lease_id=lease_id,
-        bytes_in=_content_length(request) or rx,
-        bytes_out=_result_bytes(result) or tx,
-        handshake_count=handshakes,
-    )
-    result["hypermesh_receipt"] = receipt.as_export()
-    return result
+
+    async def _meter(bytes_out: int) -> None:
+        await report_session_metrics(
+            _control(request),
+            tenant_id,
+            tunnel_id=cached.tunnel_id if cached else None,
+            lease_id=lease_id,
+            bytes_in=_content_length(request) or rx,
+            bytes_out=bytes_out or tx,
+            handshake_count=handshakes,
+        )
+
+    return _stream_chat(proxied, after_bytes=_meter)
 
 
 async def _export_receipts(request: Request) -> dict[str, Any]:
@@ -408,22 +429,22 @@ async def _export_receipts(request: Request) -> dict[str, Any]:
 
 
 @router.post("/v1/chat/completions")
-async def sibling_chat(request: Request, body: ChatCompletionRequest) -> dict[str, Any]:
+async def sibling_chat(request: Request, body: ChatCompletionRequest):
     return await _chat(request, body)
 
 
 @openai_router.post("/v1/chat/completions")
-async def openai_chat(request: Request, body: ChatCompletionRequest) -> dict[str, Any]:
+async def openai_chat(request: Request, body: ChatCompletionRequest):
     return await _chat(request, body)
 
 
 @router.post("/v1/ir/chat/completions")
-async def sibling_ir_chat(request: Request, body: ChatCompletionRequest) -> dict[str, Any]:
+async def sibling_ir_chat(request: Request, body: ChatCompletionRequest):
     return await _ir_chat(request, body)
 
 
 @openai_router.post("/v1/ir/chat/completions")
-async def openai_ir_chat(request: Request, body: ChatCompletionRequest) -> dict[str, Any]:
+async def openai_ir_chat(request: Request, body: ChatCompletionRequest):
     return await _ir_chat(request, body)
 
 

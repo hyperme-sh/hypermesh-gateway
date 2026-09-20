@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import inspect
+import json
 import uuid
 from datetime import UTC, datetime, timedelta
 
@@ -151,15 +152,69 @@ async def test_proxy_chat_cached_ticket_does_not_call_get_lease(control_plane):
         catalog_id="llama-3.1-8b-q4",
     )
     runtime = httpx.AsyncClient(transport=httpx.MockTransport(handler))
-    out = await proxy_chat(
+    proxied = await proxy_chat(
         lease_id=lease_id,
         payload={"messages": [{"role": "user", "content": "hi"}]},
         client_address="10.77.0.2/32",
         runtime_client=runtime,
     )
+    raw = b"".join([chunk async for chunk in proxied.iter_bytes()])
+    out = json.loads(raw)
     assert out["object"] == "chat.completion"
     assert control_plane.get_lease_calls == 0
     assert control_plane.list_tunnels_calls == 0
+
+
+@pytest.mark.asyncio
+async def test_proxy_chat_yields_first_chunk_before_upstream_finishes(monkeypatch):
+    import threading
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    import httpx
+
+    gate = threading.Event()
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_POST(self) -> None:
+            length = int(self.headers.get("Content-Length") or 0)
+            if length:
+                self.rfile.read(length)
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream")
+            self.end_headers()
+            self.wfile.write(b"data: one\n\n")
+            self.wfile.flush()
+            gate.wait(timeout=2)
+            self.wfile.write(b"data: [DONE]\n\n")
+            self.wfile.flush()
+
+        def log_message(self, format: str, *args) -> None:
+            del format, args
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    monkeypatch.setenv("HYPERMESH_CHAT_UPSTREAM_PORT", str(server.server_address[1]))
+    runtime = httpx.AsyncClient()
+    try:
+        proxied = await proxy_chat(
+            lease_id=uuid.uuid4(),
+            payload={"messages": [{"role": "user", "content": "hi"}], "stream": True},
+            client_address="127.0.0.1/32",
+            runtime_client=runtime,
+        )
+        agen = proxied.iter_bytes()
+        first = await agen.__anext__()
+        assert b"one" in first
+        gate.set()
+        rest = b"".join([chunk async for chunk in agen])
+        assert b"[DONE]" in rest
+    finally:
+        gate.set()
+        await runtime.aclose()
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
 
 
 @pytest.mark.asyncio
