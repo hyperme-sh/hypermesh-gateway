@@ -328,6 +328,7 @@ async def test_renter_chat_uses_cached_ticket_not_control_plane(
         "bytes_in",
         "bytes_out",
         "handshake_count",
+        "metric_id",
     }
     dumped = str(metric)
     assert "secret prompt" not in dumped

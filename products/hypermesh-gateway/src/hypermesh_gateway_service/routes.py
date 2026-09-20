@@ -14,7 +14,12 @@ from starlette.responses import StreamingResponse
 from api.common.internal_token import internal_token_matches
 from hypermesh_gateway_service.chat import ChatCompletionRequest, ProxiedChat, proxy_chat
 from hypermesh_gateway_service.control_plane import ControlPlane, GatewayTunnel
-from hypermesh_gateway_service.metrics import report_session_metrics
+from hypermesh_gateway_service.metrics import (
+    MeterQueue,
+    flush_meter_queue,
+    report_session_metrics,
+)
+from hypermesh_gateway_service.quota import ChatQuota, QuotaExceeded, resolve_chat_quota
 from hypermesh_gateway_service.posture import require_chat_posture
 from hypermesh_gateway_service.receipts import ReceiptStore
 from hypermesh_gateway_service.renter_auth import (
@@ -59,6 +64,33 @@ def _receipts(request: Request) -> ReceiptStore:
         store = ReceiptStore()
         request.app.state.receipt_store = store
     return store
+
+
+def _meters(request: Request) -> MeterQueue:
+    queue = getattr(request.app.state, "meter_queue", None)
+    if queue is None:
+        queue = MeterQueue()
+        request.app.state.meter_queue = queue
+    return queue
+
+
+def _quota(request: Request) -> ChatQuota:
+    quota = getattr(request.app.state, "chat_quota", None)
+    if quota is None:
+        quota = resolve_chat_quota()
+        request.app.state.chat_quota = quota
+    return quota
+
+
+def _require_door_capacity(request: Request, lease_id: uuid.UUID) -> None:
+    """Refuse before the host hop when this door cannot bill or is over ceiling."""
+
+    if _meters(request).is_full():
+        raise HTTPException(status_code=429, detail="usage queue is full")
+    try:
+        _quota(request).allow(lease_id, incoming_bytes=_content_length(request))
+    except QuotaExceeded as exc:
+        raise HTTPException(status_code=429, detail=exc.detail) from exc
 
 
 def _classifier(request: Request):
@@ -122,11 +154,16 @@ async def refresh_assignments(
     return tunnels
 
 
-async def refresh_known_tenants(plane: ControlPlane, cache: TicketCache) -> None:
+async def refresh_known_tenants(
+    plane: ControlPlane,
+    cache: TicketCache,
+    queue: MeterQueue | None = None,
+) -> None:
     """Background hop. Pull tickets, then apply pending allocated host peers.
 
     Chat still uses the cache if Panopticon is quiet. Apply is add-once
     (one WG peer per host); it does not drop a peer on lease_stop.
+    A quiet plane still retries queued usage on this hop.
     """
 
     for tenant_id in cache.known_tenants():
@@ -135,6 +172,8 @@ async def refresh_known_tenants(plane: ControlPlane, cache: TicketCache) -> None
             apply_allocated_tunnels(tunnels)
         except Exception:
             logger.info("assignment refresh skipped")
+    if queue is not None:
+        await flush_meter_queue(plane, queue)
 
 
 async def _pull_assignments(request: Request, tenant_id: uuid.UUID) -> list[GatewayTunnel]:
@@ -306,6 +345,7 @@ async def _chat(request: Request, body: ChatCompletionRequest) -> StreamingRespo
     except TicketNotReady as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
     _bind_renter_to_ticket(request, grant, claims, tenant_id, cache)
+    _require_door_capacity(request, lease_id)
     runtime = getattr(request.app.state, "runtime_client", None)
     proxied = await proxy_chat(
         lease_id=lease_id,
@@ -319,11 +359,13 @@ async def _chat(request: Request, body: ChatCompletionRequest) -> StreamingRespo
         await report_session_metrics(
             _control(request),
             tenant_id,
+            _meters(request),
             tunnel_id=cached.tunnel_id if cached else None,
             lease_id=lease_id,
             bytes_in=_content_length(request) or rx,
             bytes_out=bytes_out or tx,
             handshake_count=handshakes,
+            quota=_quota(request),
         )
 
     return _stream_chat(proxied, after_bytes=_meter)
@@ -349,6 +391,7 @@ async def _ir_chat(request: Request, body: ChatCompletionRequest):
     except TicketNotReady as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
     _bind_renter_to_ticket(request, grant, claims, tenant_id, cache)
+    _require_door_capacity(request, lease_id)
     from hypermesh_gateway_service.classify import prompt_text_from_messages
 
     classified = _classifier(request).classify(prompt_text_from_messages(body.messages))
@@ -404,11 +447,13 @@ async def _ir_chat(request: Request, body: ChatCompletionRequest):
         await report_session_metrics(
             _control(request),
             tenant_id,
+            _meters(request),
             tunnel_id=cached.tunnel_id if cached else None,
             lease_id=lease_id,
             bytes_in=_content_length(request) or rx,
             bytes_out=bytes_out or tx,
             handshake_count=handshakes,
+            quota=_quota(request),
         )
 
     return _stream_chat(proxied, after_bytes=_meter)
