@@ -13,7 +13,8 @@ from hypermesh_gateway_service.receipts import (
 )
 from conftest import stub_api_key_validator
 from test_hypermesh_gateway import (
-    TEST_RENTER_FINGERPRINTS,
+    TEST_IR_FINGERPRINTS,
+    _ir as ir_headers,
     _mock_runtime,
     _renter as renter_headers,
     _signed_ticket,
@@ -89,13 +90,13 @@ async def test_unset_env_persists_ir_receipts_across_app_bounce(
     prompt = "secret prompt must never be persisted"
     async with LifespanManager(first_app):
         first_app.state.ticket_cache.put(tenant_id, _signed_ticket(lease_id, purpose="ir"))
-        first_app.state.ticket_cache.accept_keys(tenant_id, TEST_RENTER_FINGERPRINTS)
+        first_app.state.ticket_cache.accept_ir_keys(tenant_id, TEST_IR_FINGERPRINTS)
         _mock_runtime(first_app)
         transport = httpx.ASGITransport(app=first_app)
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
             chat = await client.post(
                 "/v1/ir/chat/completions",
-                headers=renter_headers(tenant_headers),
+                headers=ir_headers(tenant_headers),
                 json={
                     "lease_id": str(lease_id),
                     "messages": [{"role": "user", "content": prompt}],
@@ -146,13 +147,13 @@ async def test_memory_sentinel_drops_receipts_on_bounce(
     lease_id = uuid.uuid4()
     async with LifespanManager(first_app):
         first_app.state.ticket_cache.put(tenant_id, _signed_ticket(lease_id, purpose="ir"))
-        first_app.state.ticket_cache.accept_keys(tenant_id, TEST_RENTER_FINGERPRINTS)
+        first_app.state.ticket_cache.accept_ir_keys(tenant_id, TEST_IR_FINGERPRINTS)
         _mock_runtime(first_app)
         transport = httpx.ASGITransport(app=first_app)
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
             chat = await client.post(
                 "/v1/ir/chat/completions",
-                headers=renter_headers(tenant_headers),
+                headers=ir_headers(tenant_headers),
                 json={
                     "lease_id": str(lease_id),
                     "messages": [{"role": "user", "content": "secret prompt"}],

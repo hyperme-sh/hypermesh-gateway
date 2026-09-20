@@ -78,6 +78,9 @@ async def http_client(app, tenant_id):
         app.state.ticket_cache.accept_keys(
             tenant_id, [renter_key_fingerprint("pk_test.renter-key")]
         )
+        app.state.ticket_cache.accept_ir_keys(
+            tenant_id, [renter_key_fingerprint("pk_test.ir-key")]
+        )
         transport = httpx.ASGITransport(app=app)
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
             yield client

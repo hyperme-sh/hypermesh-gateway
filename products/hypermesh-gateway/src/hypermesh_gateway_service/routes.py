@@ -25,6 +25,7 @@ from hypermesh_gateway_service.receipts import ReceiptStore
 from hypermesh_gateway_service.renter_auth import (
     RenterGrant,
     presented_renter_key,
+    require_auditor_grant,
     require_renter_grant,
     require_tenant_bound_grant,
     require_ticket_bound_grant,
@@ -261,6 +262,24 @@ def _bind_renter_to_ticket(
     )
 
 
+def _bind_auditor_to_ticket(
+    request: Request,
+    grant: RenterGrant,
+    claims: TicketClaims,
+    tenant_id: uuid.UUID,
+    cache: TicketCache,
+) -> None:
+    """IR classify binds an AIuditor key, never the renter fingerprint set."""
+
+    require_ticket_tenant(claims, tenant_id)
+    require_ticket_bound_grant(
+        grant,
+        ticket_tenant_id=claims.tenant_id or tenant_id,
+        key_fingerprints=cache.ir_key_fingerprints(tenant_id),
+        presented_key=presented_renter_key(request) if grant.kind == "api_key" else None,
+    )
+
+
 def _lease_id(request: Request, body: ChatCompletionRequest) -> uuid.UUID:
     header = request.headers.get("X-Hypermesh-Lease-Id") or request.headers.get("X-Lease-Id")
     if body.lease_id is not None:
@@ -374,7 +393,7 @@ async def _chat(request: Request, body: ChatCompletionRequest) -> StreamingRespo
 async def _ir_chat(request: Request, body: ChatCompletionRequest):
     """Opt-in IR door. Classify. Allow or hold. Receipt stays on this door."""
 
-    grant = require_renter_grant(request)
+    grant = require_auditor_grant(request)
     tenant_id = _tenant_id(request)
     lease_id = _lease_id(request, body)
     cache = _tickets(request)
@@ -390,7 +409,7 @@ async def _ir_chat(request: Request, body: ChatCompletionRequest):
         require_ir_chat_purpose(claims)
     except TicketNotReady as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
-    _bind_renter_to_ticket(request, grant, claims, tenant_id, cache)
+    _bind_auditor_to_ticket(request, grant, claims, tenant_id, cache)
     _require_door_capacity(request, lease_id)
     from hypermesh_gateway_service.classify import prompt_text_from_messages
 

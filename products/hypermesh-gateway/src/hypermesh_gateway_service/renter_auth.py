@@ -34,12 +34,15 @@ GATEWAY_SECRET_HEAD = "hm_gw_"
 SITE_TOKEN_HEAD = "hm_site_"
 TICKET_PREFIX = "hm1."
 RENTER_AUTH_REQUIRED = "API key or access token required"
+AUDITOR_GRANT_REQUIRED = "IR purpose key or ir role JWT required"
 TENANT_CLAIM = "https://panopticon.dev/tenant_id"
+AUDITOR_JWT_PURPOSES = frozenset({"ir"})
+AUDITOR_JWT_ROLES = frozenset({"ir", "ir_export"})
 
 
 class RenterUnauthorized(HTTPException):
-    def __init__(self) -> None:
-        super().__init__(status_code=401, detail=RENTER_AUTH_REQUIRED)
+    def __init__(self, detail: str = RENTER_AUTH_REQUIRED) -> None:
+        super().__init__(status_code=401, detail=detail)
 
 
 @dataclass(frozen=True)
@@ -151,6 +154,35 @@ def _tenant_matches(claims: dict[str, Any], tenant_id: str | None) -> bool:
         return _tenant_claim_is(claims, uuid.UUID(str(tenant_id)))
     except (ValueError, AttributeError, TypeError):
         return False
+
+
+def _jwt_is_auditor(claims: dict[str, Any] | None) -> bool:
+    """IR door grant. Purpose=ir exchange JWT or an ir / ir_export role."""
+
+    if not claims:
+        return False
+    purpose = str(claims.get("purpose") or "").strip().lower()
+    if purpose in AUDITOR_JWT_PURPOSES:
+        return True
+    roles: list[str] = []
+    ra = claims.get("realm_access")
+    if isinstance(ra, dict):
+        raw_roles = ra.get("roles")
+        if isinstance(raw_roles, list):
+            roles.extend(str(item).strip() for item in raw_roles)
+    groups = claims.get("groups")
+    if isinstance(groups, list):
+        roles.extend(str(item).strip() for item in groups)
+    return any(role in AUDITOR_JWT_ROLES for role in roles)
+
+
+def require_auditor_grant(request: Request) -> RenterGrant:
+    """IR classify grant. A renter key or renter-only JWT is not enough."""
+
+    grant = require_renter_grant(request)
+    if grant.kind == "jwt" and not _jwt_is_auditor(grant.claims):
+        raise RenterUnauthorized(AUDITOR_GRANT_REQUIRED)
+    return grant
 
 
 def require_renter_grant(request: Request) -> RenterGrant:
