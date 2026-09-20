@@ -6,19 +6,24 @@ still required. Purpose lives on that ticket, not here. Completions do
 not call Keycloak or Panopticon. Not an IdP. Not a fourth identity:
 renter key / JWT, host device_secret, gateway hm_gw_, or site hm_site_.
 
-API key is format-only on the completions path: the signed ticket carries the
-tenant and the lease, so a forged key reaches nothing. Doors that read
-tenant-wide history have no such ticket to bind against and must instead call
-require_tenant_bound_grant, which resolves the caller's real tenant.
+API key format is only the first parse. Chat then binds the credential to the
+signed ticket: JWT tenant claim must match the ticket tenant, and an API key
+must hash to a fingerprint the plane pushed on GET /gateway/tickets. Doors
+that read tenant-wide history have no ticket to bind against and must instead
+call require_tenant_bound_grant, which resolves the caller's real tenant.
 """
 
 from __future__ import annotations
 
+import hmac
 import logging
 import os
 import uuid
+from collections.abc import Collection
 from dataclasses import dataclass
 from typing import Any, Literal, Protocol
+
+from hypermesh_service.ticket import renter_key_fingerprint
 
 from fastapi import HTTPException, Request
 
@@ -171,6 +176,38 @@ def require_renter_grant(request: Request) -> RenterGrant:
         return RenterGrant(kind="api_key", subject=_subject_from_api_key(header_key))
 
     raise RenterUnauthorized()
+
+
+def presented_renter_key(request: Request) -> str | None:
+    header_key = _api_key_header(request)
+    if header_key and looks_like_api_key(header_key) and not _forbidden_identity(header_key):
+        return header_key
+    bearer = _bearer(request)
+    if bearer and looks_like_api_key(bearer) and not _forbidden_identity(bearer):
+        return bearer
+    return None
+
+
+def require_ticket_bound_grant(
+    grant: RenterGrant,
+    *,
+    ticket_tenant_id: uuid.UUID,
+    key_fingerprints: Collection[str],
+    presented_key: str | None,
+) -> RenterGrant:
+    """Prove the caller owns a credential for the ticket's tenant. Local only."""
+
+    if grant.kind == "jwt":
+        if not _tenant_claim_is(grant.claims, ticket_tenant_id):
+            raise RenterUnauthorized()
+        return grant
+    if not presented_key:
+        raise RenterUnauthorized()
+    fingerprint = renter_key_fingerprint(presented_key)
+    accepted = [str(item).strip().lower() for item in key_fingerprints if str(item).strip()]
+    if not accepted or not any(hmac.compare_digest(fingerprint, item) for item in accepted):
+        raise RenterUnauthorized()
+    return grant
 
 
 def _api_keys_base_url() -> str:

@@ -61,11 +61,15 @@ def app(control_plane, monkeypatch):
 
 
 @pytest.fixture
-async def http_client(app):
+async def http_client(app, tenant_id):
     import httpx
     from asgi_lifespan import LifespanManager
+    from hypermesh_service.ticket import renter_key_fingerprint
 
     async with LifespanManager(app):
+        app.state.ticket_cache.accept_keys(
+            tenant_id, [renter_key_fingerprint("pk_test.renter-key")]
+        )
         transport = httpx.ASGITransport(app=app)
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
             yield client

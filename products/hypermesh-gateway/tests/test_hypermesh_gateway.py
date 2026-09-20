@@ -11,12 +11,30 @@ from hypermesh_gateway_service.chat import INSTANCE_NOT_READY, proxy_chat
 from hypermesh_gateway_service.control_plane import GatewayTunnel, HttpControlPlane, LeaseView
 from hypermesh_gateway_service.posture import require_chat_posture
 from hypermesh_gateway_service.tickets import CachedTicket, TicketCache, TicketPull
-from hypermesh_service.seed import FYBER_AGX_DEVICE_ID, FYBER_TEST_GATEWAY_ID
-from hypermesh_service.ticket import TicketClaims, TicketNotReady, issue_ticket
+from hypermesh_service.seed import (
+    FYBER_AGX_DEVICE_ID,
+    FYBER_TEST_GATEWAY_ID,
+    MARKETPLACE_TENANT_ID,
+)
+from hypermesh_service.ticket import TicketClaims, TicketNotReady, issue_ticket, renter_key_fingerprint
+
+TEST_RENTER_KEY = "pk_test.renter-key"
+TEST_RENTER_FINGERPRINTS = [renter_key_fingerprint(TEST_RENTER_KEY)]
 
 
 def _renter(tenant_headers: dict[str, str]) -> dict[str, str]:
-    return {**tenant_headers, "Authorization": "Bearer pk_test.renter-key"}
+    return {**tenant_headers, "Authorization": f"Bearer {TEST_RENTER_KEY}"}
+
+
+def _ticket_pull(
+    tickets: list[CachedTicket],
+    revoked: list[uuid.UUID] | None = None,
+) -> TicketPull:
+    return TicketPull(
+        tickets=tickets,
+        revoked_lease_ids=revoked or [],
+        key_fingerprints=TEST_RENTER_FINGERPRINTS,
+    )
 
 
 def _gateway(tenant_headers: dict[str, str]) -> dict[str, str]:
@@ -84,6 +102,7 @@ def _signed_ticket(
             status="active",
             exp=exp,
             purpose=purpose,
+            tenant_id=MARKETPLACE_TENANT_ID,
         )
     )
     return CachedTicket(
@@ -205,7 +224,7 @@ async def test_renter_chat_uses_cached_ticket_not_control_plane(
 
     lease_id = uuid.uuid4()
     control_plane.tunnels.append(_allocated_tunnel(lease_id))
-    control_plane.ticket_pull = TicketPull(tickets=[_signed_ticket(lease_id)], revoked_lease_ids=[])
+    control_plane.ticket_pull = _ticket_pull([_signed_ticket(lease_id)])
     pulled = await http_client.post(
         "/api/v1/hypermesh-gateway/tunnels/apply",
         headers=_gateway(tenant_headers),
@@ -404,7 +423,7 @@ async def test_revoked_ticket_cannot_keep_session(
     lease_id = uuid.uuid4()
     ticket = _signed_ticket(lease_id)
     control_plane.tunnels.append(_allocated_tunnel(lease_id))
-    control_plane.ticket_pull = TicketPull(tickets=[ticket], revoked_lease_ids=[])
+    control_plane.ticket_pull = _ticket_pull([ticket])
     applied = await http_client.post(
         "/api/v1/hypermesh-gateway/tunnels/apply",
         headers=_gateway(tenant_headers),
@@ -583,7 +602,7 @@ async def test_refresh_known_tenants_applies_allocated_host_peer(
     lease_id = uuid.uuid4()
     tunnel = _allocated_tunnel(lease_id)
     control_plane.tunnels.append(tunnel)
-    control_plane.ticket_pull = TicketPull(tickets=[_signed_ticket(lease_id)], revoked_lease_ids=[])
+    control_plane.ticket_pull = _ticket_pull([_signed_ticket(lease_id)])
     cache = TicketCache()
     cache.watch(tenant_id)
 
@@ -683,7 +702,7 @@ async def test_tunnels_apply_uses_same_allocated_apply_path(
     )
     lease_id = uuid.uuid4()
     control_plane.tunnels.append(_allocated_tunnel(lease_id))
-    control_plane.ticket_pull = TicketPull(tickets=[_signed_ticket(lease_id)], revoked_lease_ids=[])
+    control_plane.ticket_pull = _ticket_pull([_signed_ticket(lease_id)])
 
     pulled = await http_client.post(
         "/api/v1/hypermesh-gateway/tunnels/apply",
@@ -825,15 +844,19 @@ async def test_http_control_plane_parses_path_b_state(tenant_id, monkeypatch):
 
 
 class _AcceptJwt:
-    def __init__(self, token: str) -> None:
+    def __init__(self, token: str, tenant_id: uuid.UUID | None = None) -> None:
         self.token = token
+        self.tenant_id = tenant_id
         self.calls = 0
 
     def validate_sync(self, token: str) -> dict[str, object]:
         self.calls += 1
         if token != self.token:
             raise ValueError("rejected")
-        return {"sub": "portal-user", "azp": "controlplane-frontend"}
+        claims: dict[str, object] = {"sub": "portal-user", "azp": "controlplane-frontend"}
+        if self.tenant_id is not None:
+            claims["https://panopticon.dev/tenant_id"] = str(self.tenant_id)
+        return claims
 
     async def validate(self, token: str) -> dict[str, object]:
         return self.validate_sync(token)
@@ -847,7 +870,7 @@ async def test_chat_portal_jwt_local_verify_plus_ticket(
 
     lease_id = uuid.uuid4()
     app.state.ticket_cache.put(tenant_id, _signed_ticket(lease_id))
-    validator = _AcceptJwt("portal.jwt.token")
+    validator = _AcceptJwt("portal.jwt.token", tenant_id)
     app.state.renter_jwt_validator = validator
     _mock_runtime(app)
     chat = await http_client.post(

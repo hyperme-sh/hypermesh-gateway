@@ -7,7 +7,7 @@ and honor_ticket. Do not re-ask the control plane per completion.
 from __future__ import annotations
 
 import uuid
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from typing import Iterable
 
@@ -38,12 +38,14 @@ class CachedTicket:
 class TicketPull:
     tickets: list[CachedTicket]
     revoked_lease_ids: list[uuid.UUID]
+    key_fingerprints: list[str] = field(default_factory=list)
 
 
 class TicketCache:
     def __init__(self) -> None:
         self._tickets: dict[tuple[uuid.UUID, uuid.UUID], CachedTicket] = {}
         self._revoked: dict[uuid.UUID, set[uuid.UUID]] = {}
+        self._fingerprints: dict[uuid.UUID, set[str]] = {}
         self._watched: set[uuid.UUID] = set()
 
     def watch(self, tenant_id: uuid.UUID) -> None:
@@ -72,6 +74,7 @@ class TicketCache:
         for key in stale:
             del self._tickets[key]
         self._revoked[tenant_id] = set(pull.revoked_lease_ids)
+        self.accept_keys(tenant_id, pull.key_fingerprints)
         for ticket in pull.tickets:
             tunnel = by_lease.get(ticket.lease_id)
             enriched = ticket
@@ -86,6 +89,14 @@ class TicketCache:
                 )
             self._tickets[(tenant_id, ticket.lease_id)] = enriched
 
+    def accept_keys(self, tenant_id: uuid.UUID, fingerprints: Iterable[str]) -> None:
+        self._fingerprints[tenant_id] = {
+            str(item).strip().lower() for item in fingerprints if str(item).strip()
+        }
+
+    def key_fingerprints(self, tenant_id: uuid.UUID) -> set[str]:
+        return set(self._fingerprints.get(tenant_id, set()))
+
     def put(self, tenant_id: uuid.UUID, ticket: CachedTicket) -> None:
         self._tickets[(tenant_id, ticket.lease_id)] = ticket
 
@@ -99,11 +110,14 @@ class TicketCache:
         ticket = self.get(tenant_id, lease_id)
         if ticket is None or not ticket.active:
             raise TicketNotReady()
-        return honor_ticket(
+        claims = honor_ticket(
             ticket.ticket,
             gateway_id=ticket.assigned_gateway_id,
             revoked_lease_ids=self.revoked_lease_ids(tenant_id),
         )
+        if claims.tenant_id is not None and claims.tenant_id != tenant_id:
+            raise TicketNotReady()
+        return claims
 
     def active_address(self, tenant_id: uuid.UUID, lease_id: uuid.UUID) -> str | None:
         try:

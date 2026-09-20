@@ -16,12 +16,15 @@ from starlette.requests import Request
 from api.infrastructure.security.api_key_exchange_jwt import mint_api_key_session_jwt
 from hypermesh_gateway_service.renter_auth import (
     RENTER_AUTH_REQUIRED,
+    RenterGrant,
     RenterUnauthorized,
     looks_like_api_key,
     looks_like_jwt,
     require_renter_grant,
+    require_ticket_bound_grant,
     verify_jwt_locally,
 )
+from hypermesh_service.ticket import renter_key_fingerprint
 
 
 class _AcceptJwt:
@@ -211,3 +214,55 @@ def test_require_renter_grant_rejects_exchange_jwt_for_other_tenant(tenant_id):
     other = uuid.uuid4()
     with pytest.raises(RenterUnauthorized):
         require_renter_grant(_request(authorization=f"Bearer {token}", tenant_id=other))
+
+
+def test_ticket_bound_grant_accepts_matching_key_and_jwt(tenant_id):
+    key = "pk_test.renter-key"
+    grant = RenterGrant(kind="api_key", subject="pk_test")
+    bound = require_ticket_bound_grant(
+        grant,
+        ticket_tenant_id=tenant_id,
+        key_fingerprints=[renter_key_fingerprint(key)],
+        presented_key=key,
+    )
+    assert bound.kind == "api_key"
+
+    token = mint_api_key_session_jwt(
+        key_record_id=uuid.uuid4(),
+        tenant_id=tenant_id,
+        scopes=[],
+    )
+    jwt_grant = require_renter_grant(
+        _request(authorization=f"Bearer {token}", tenant_id=tenant_id)
+    )
+    require_ticket_bound_grant(
+        jwt_grant,
+        ticket_tenant_id=tenant_id,
+        key_fingerprints=[],
+        presented_key=None,
+    )
+
+
+def test_ticket_bound_grant_rejects_unknown_key_and_unbound_jwt(tenant_id):
+    grant = RenterGrant(kind="api_key", subject="pk_test")
+    with pytest.raises(RenterUnauthorized):
+        require_ticket_bound_grant(
+            grant,
+            ticket_tenant_id=tenant_id,
+            key_fingerprints=[renter_key_fingerprint("pk_test.renter-key")],
+            presented_key="attacker.forged",
+        )
+    with pytest.raises(RenterUnauthorized):
+        require_ticket_bound_grant(
+            grant,
+            ticket_tenant_id=tenant_id,
+            key_fingerprints=[],
+            presented_key="pk_test.renter-key",
+        )
+    with pytest.raises(RenterUnauthorized):
+        require_ticket_bound_grant(
+            RenterGrant(kind="jwt", subject="portal-user", claims={"sub": "portal-user"}),
+            ticket_tenant_id=tenant_id,
+            key_fingerprints=[],
+            presented_key=None,
+        )

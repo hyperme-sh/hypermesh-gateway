@@ -18,16 +18,21 @@ from hypermesh_gateway_service.metrics import report_session_metrics
 from hypermesh_gateway_service.posture import require_chat_posture
 from hypermesh_gateway_service.receipts import ReceiptStore
 from hypermesh_gateway_service.renter_auth import (
+    RenterGrant,
+    presented_renter_key,
     require_renter_grant,
     require_tenant_bound_grant,
+    require_ticket_bound_grant,
 )
 from hypermesh_gateway_service.tenants import MARKETPLACE_TENANT_ID
 from hypermesh_gateway_service.tickets import TicketCache
 from hypermesh_gateway_service.wg import apply_gateway, peer_counters, peer_is_up
 from hypermesh_service.ticket import (
+    TicketClaims,
     TicketNotReady,
     require_ir_chat_purpose,
     require_renter_chat_purpose,
+    require_ticket_tenant,
 )
 
 logger = logging.getLogger(__name__)
@@ -185,6 +190,22 @@ def _tenant_id(request: Request) -> uuid.UUID:
         raise HTTPException(status_code=400, detail="Invalid X-Tenant-ID") from exc
 
 
+def _bind_renter_to_ticket(
+    request: Request,
+    grant: RenterGrant,
+    claims: TicketClaims,
+    tenant_id: uuid.UUID,
+    cache: TicketCache,
+) -> None:
+    require_ticket_tenant(claims, tenant_id)
+    require_ticket_bound_grant(
+        grant,
+        ticket_tenant_id=claims.tenant_id or tenant_id,
+        key_fingerprints=cache.key_fingerprints(tenant_id),
+        presented_key=presented_renter_key(request) if grant.kind == "api_key" else None,
+    )
+
+
 def _lease_id(request: Request, body: ChatCompletionRequest) -> uuid.UUID:
     header = request.headers.get("X-Hypermesh-Lease-Id") or request.headers.get("X-Lease-Id")
     if body.lease_id is not None:
@@ -252,7 +273,7 @@ async def post_metrics(request: Request, body: MetricsBody) -> dict[str, str]:
 
 
 async def _chat(request: Request, body: ChatCompletionRequest) -> dict[str, Any]:
-    require_renter_grant(request)
+    grant = require_renter_grant(request)
     tenant_id = _tenant_id(request)
     lease_id = _lease_id(request, body)
     cache = _tickets(request)
@@ -265,12 +286,10 @@ async def _chat(request: Request, body: ChatCompletionRequest) -> dict[str, Any]
             lease_id,
             peer_up=_peer_is_up(request, peer_key),
         )
-    except TicketNotReady as exc:
-        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
-    try:
         require_renter_chat_purpose(claims)
     except TicketNotReady as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+    _bind_renter_to_ticket(request, grant, claims, tenant_id, cache)
     runtime = getattr(request.app.state, "runtime_client", None)
     result = await proxy_chat(
         lease_id=lease_id,
@@ -307,12 +326,10 @@ async def _ir_chat(request: Request, body: ChatCompletionRequest) -> dict[str, A
             lease_id,
             peer_up=_peer_is_up(request, peer_key),
         )
-    except TicketNotReady as exc:
-        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
-    try:
         require_ir_chat_purpose(claims)
     except TicketNotReady as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+    _bind_renter_to_ticket(request, grant, claims, tenant_id, cache)
     from hypermesh_gateway_service.classify import prompt_text_from_messages
 
     classified = _classifier(request).classify(prompt_text_from_messages(body.messages))

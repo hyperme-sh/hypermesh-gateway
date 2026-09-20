@@ -7,7 +7,12 @@ import pytest
 from hypermesh_gateway_service.chat import INSTANCE_NOT_READY
 from hypermesh_gateway_service.receipts import ReceiptStore, sanitize_receipt_payload
 from conftest import stub_api_key_validator
-from test_hypermesh_gateway import _mock_runtime, _renter as renter_headers, _signed_ticket
+from test_hypermesh_gateway import (
+    TEST_RENTER_FINGERPRINTS,
+    _mock_runtime,
+    _renter as renter_headers,
+    _signed_ticket,
+)
 
 
 @pytest.mark.asyncio
@@ -216,6 +221,7 @@ async def test_ir_door_uses_injected_classifier_without_proxy(
 
     async with LifespanManager(app):
         app.state.ticket_cache.put(tenant_id, _signed_ticket(lease_id, purpose="ir"))
+        app.state.ticket_cache.accept_keys(tenant_id, TEST_RENTER_FINGERPRINTS)
         app.state.runtime_client = httpx.AsyncClient(transport=httpx.MockTransport(boom))
         transport = httpx.ASGITransport(app=app)
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
@@ -309,6 +315,7 @@ async def test_ir_door_receipts_reload_from_file(
 
     async with LifespanManager(first_app):
         first_app.state.ticket_cache.put(tenant_id, _signed_ticket(lease_id, purpose="ir"))
+        first_app.state.ticket_cache.accept_keys(tenant_id, TEST_RENTER_FINGERPRINTS)
         _mock_runtime(first_app)
         transport = httpx.ASGITransport(app=first_app)
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:

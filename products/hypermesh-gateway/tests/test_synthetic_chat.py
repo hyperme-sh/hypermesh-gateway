@@ -16,8 +16,15 @@ import pytest
 from hypermesh_gateway_service.chat import CHAT_PORT_ENV, INSTANCE_NOT_READY
 from hypermesh_gateway_service.control_plane import GatewayTunnel
 from hypermesh_gateway_service.tickets import CachedTicket, TicketPull
-from hypermesh_service.seed import FYBER_AGX_DEVICE_ID, FYBER_TEST_GATEWAY_ID
-from hypermesh_service.ticket import TicketClaims, issue_ticket
+from hypermesh_service.seed import (
+    FYBER_AGX_DEVICE_ID,
+    FYBER_TEST_GATEWAY_ID,
+    MARKETPLACE_TENANT_ID,
+)
+from hypermesh_service.ticket import TicketClaims, issue_ticket, renter_key_fingerprint
+
+TEST_RENTER_KEY = "pk_test.renter-key"
+TEST_RENTER_FINGERPRINTS = [renter_key_fingerprint(TEST_RENTER_KEY)]
 from mock_host import MOCK_COMPLETION, MockHost
 
 
@@ -50,6 +57,7 @@ def _signed_ticket(
             client_address=client_address,
             status="active",
             exp=exp,
+            tenant_id=MARKETPLACE_TENANT_ID,
         ),
         key=_TEST_TICKET_KEY,
     )
@@ -111,7 +119,11 @@ async def test_synthetic_gateway_chat_proxies_mock_host(
         assert "peer_private_key" not in fixture
 
         control_plane.tunnels.append(_allocated_tunnel(lease_id, host.client_address))
-        control_plane.ticket_pull = TicketPull(tickets=[ticket], revoked_lease_ids=[])
+        control_plane.ticket_pull = TicketPull(
+            tickets=[ticket],
+            revoked_lease_ids=[],
+            key_fingerprints=TEST_RENTER_FINGERPRINTS,
+        )
         applied = await http_client.post(
             "/api/v1/hypermesh-gateway/tunnels/apply",
             headers=_gateway(tenant_headers),

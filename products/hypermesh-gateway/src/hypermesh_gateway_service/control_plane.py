@@ -126,7 +126,16 @@ class HttpControlPlane:
                 )
             )
         revoked = [uuid.UUID(str(item)) for item in body.get("revoked_lease_ids", [])]
-        return TicketPull(tickets=tickets, revoked_lease_ids=revoked)
+        fingerprints = [
+            str(item).strip().lower()
+            for item in body.get("key_fingerprints") or []
+            if str(item).strip()
+        ]
+        return TicketPull(
+            tickets=tickets,
+            revoked_lease_ids=revoked,
+            key_fingerprints=fingerprints,
+        )
 
     async def post_metrics(
         self,
@@ -191,6 +200,7 @@ class FakeControlPlane:
         return TicketPull(
             tickets=list(self.ticket_pull.tickets),
             revoked_lease_ids=list(self.ticket_pull.revoked_lease_ids),
+            key_fingerprints=list(self.ticket_pull.key_fingerprints),
         )
 
     async def post_metrics(
