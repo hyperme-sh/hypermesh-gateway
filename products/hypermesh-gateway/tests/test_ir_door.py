@@ -97,7 +97,16 @@ async def test_ir_door_allows_authorized_work_and_holds_receipt(
     assert chat.status_code == 200
     body = chat.json()
     assert body["object"] == "chat.completion"
-    receipt = body["hypermesh_receipt"]
+    assert "hypermesh_receipt" not in body
+    app.state.api_key_validator = stub_api_key_validator(tenant_id)
+    exported = await http_client.get(
+        "/v1/ir/receipts",
+        headers=renter_headers(tenant_headers),
+    )
+    assert exported.status_code == 200, exported.text
+    receipts = exported.json()["receipts"]
+    assert len(receipts) == 1
+    receipt = receipts[0]
     assert receipt["decision"] == "allow"
     assert receipt["class"] == "incident_triage"
     assert receipt["why"] == "ir"
