@@ -4,6 +4,8 @@ import uuid
 
 import pytest
 
+from api.core import config as api_config
+
 from hypermesh_gateway_service.app import create_app
 from hypermesh_gateway_service.control_plane import FakeControlPlane, GatewayTunnel, LeaseView
 from hypermesh_gateway_service.tenants import MARKETPLACE_TENANT_ID
@@ -12,6 +14,11 @@ from hypermesh_gateway_service.tenants import MARKETPLACE_TENANT_ID
 @pytest.fixture(autouse=True)
 def _clear_ir_taxonomy_override(monkeypatch):
     monkeypatch.delenv("HYPERMESH_IR_TAXONOMY_PACK", raising=False)
+    monkeypatch.setattr(
+        api_config.settings,
+        "api_key_exchange_jwt_secret",
+        "test-api-key-exchange-secret-min-32-chars!!",
+    )
 
 
 def stub_api_key_validator(answers: uuid.UUID | None):
