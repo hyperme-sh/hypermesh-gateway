@@ -15,11 +15,13 @@ from starlette.requests import Request
 
 from api.infrastructure.security.api_key_exchange_jwt import mint_api_key_session_jwt
 from hypermesh_gateway_service.renter_auth import (
+    AUDITOR_GRANT_REQUIRED,
     RENTER_AUTH_REQUIRED,
     RenterGrant,
     RenterUnauthorized,
     looks_like_api_key,
     looks_like_jwt,
+    require_auditor_grant,
     require_renter_grant,
     require_ticket_bound_grant,
     verify_jwt_locally,
@@ -28,9 +30,16 @@ from hypermesh_service.ticket import renter_key_fingerprint
 
 
 class _AcceptJwt:
-    def __init__(self, token: str, tenant_id: uuid.UUID | None = None) -> None:
+    def __init__(
+        self,
+        token: str,
+        tenant_id: uuid.UUID | None = None,
+        *,
+        roles: list[str] | None = None,
+    ) -> None:
         self.token = token
         self.tenant_id = tenant_id
+        self.roles = roles or []
         self.calls = 0
 
     def validate_sync(self, token: str) -> dict[str, object]:
@@ -40,6 +49,9 @@ class _AcceptJwt:
         claims: dict[str, object] = {"sub": "portal-user", "azp": "controlplane-frontend"}
         if self.tenant_id is not None:
             claims["https://panopticon.dev/tenant_id"] = str(self.tenant_id)
+        if self.roles:
+            claims["realm_access"] = {"roles": list(self.roles)}
+            claims["groups"] = list(self.roles)
         return claims
 
     async def validate(self, token: str) -> dict[str, object]:
@@ -247,6 +259,45 @@ def test_require_renter_grant_rejects_exchange_jwt_for_other_tenant(tenant_id):
     other = uuid.uuid4()
     with pytest.raises(RenterUnauthorized):
         require_renter_grant(_request(authorization=f"Bearer {token}", tenant_id=other))
+
+
+def test_require_auditor_grant_accepts_ir_purpose_jwt(tenant_id):
+    token = mint_api_key_session_jwt(
+        key_record_id=uuid.uuid4(),
+        tenant_id=tenant_id,
+        scopes=[],
+        purpose="ir",
+    )
+    grant = require_auditor_grant(
+        _request(authorization=f"Bearer {token}", tenant_id=tenant_id)
+    )
+    assert grant.kind == "jwt"
+
+
+def test_require_auditor_grant_rejects_renter_jwt(tenant_id):
+    token = mint_api_key_session_jwt(
+        key_record_id=uuid.uuid4(),
+        tenant_id=tenant_id,
+        scopes=[],
+        purpose="renter",
+    )
+    with pytest.raises(RenterUnauthorized) as exc:
+        require_auditor_grant(
+            _request(authorization=f"Bearer {token}", tenant_id=tenant_id)
+        )
+    assert exc.value.detail == AUDITOR_GRANT_REQUIRED
+
+
+def test_require_auditor_grant_accepts_ir_role_session(tenant_id):
+    validator = _AcceptJwt("good.jwt.token", tenant_id=tenant_id, roles=["ir"])
+    grant = require_auditor_grant(
+        _request(
+            authorization="Bearer good.jwt.token",
+            tenant_id=tenant_id,
+            validator=validator,
+        )
+    )
+    assert grant.kind == "jwt"
 
 
 def test_ticket_bound_grant_accepts_matching_key_and_jwt(tenant_id):

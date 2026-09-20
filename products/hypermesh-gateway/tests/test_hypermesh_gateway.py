@@ -21,10 +21,16 @@ from hypermesh_service.ticket import TicketClaims, TicketNotReady, issue_ticket,
 
 TEST_RENTER_KEY = "pk_test.renter-key"
 TEST_RENTER_FINGERPRINTS = [renter_key_fingerprint(TEST_RENTER_KEY)]
+TEST_IR_KEY = "pk_test.ir-key"
+TEST_IR_FINGERPRINTS = [renter_key_fingerprint(TEST_IR_KEY)]
 
 
 def _renter(tenant_headers: dict[str, str]) -> dict[str, str]:
     return {**tenant_headers, "Authorization": f"Bearer {TEST_RENTER_KEY}"}
+
+
+def _ir(tenant_headers: dict[str, str]) -> dict[str, str]:
+    return {**tenant_headers, "Authorization": f"Bearer {TEST_IR_KEY}"}
 
 
 def _ticket_pull(

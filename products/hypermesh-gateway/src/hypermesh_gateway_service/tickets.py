@@ -39,6 +39,7 @@ class TicketPull:
     tickets: list[CachedTicket]
     revoked_lease_ids: list[uuid.UUID]
     key_fingerprints: list[str] = field(default_factory=list)
+    ir_key_fingerprints: list[str] = field(default_factory=list)
 
 
 class TicketCache:
@@ -46,6 +47,7 @@ class TicketCache:
         self._tickets: dict[tuple[uuid.UUID, uuid.UUID], CachedTicket] = {}
         self._revoked: dict[uuid.UUID, set[uuid.UUID]] = {}
         self._fingerprints: dict[uuid.UUID, set[str]] = {}
+        self._ir_fingerprints: dict[uuid.UUID, set[str]] = {}
         self._watched: set[uuid.UUID] = set()
 
     def watch(self, tenant_id: uuid.UUID) -> None:
@@ -75,6 +77,7 @@ class TicketCache:
             del self._tickets[key]
         self._revoked[tenant_id] = set(pull.revoked_lease_ids)
         self.accept_keys(tenant_id, pull.key_fingerprints)
+        self.accept_ir_keys(tenant_id, pull.ir_key_fingerprints)
         for ticket in pull.tickets:
             tunnel = by_lease.get(ticket.lease_id)
             enriched = ticket
@@ -96,6 +99,14 @@ class TicketCache:
 
     def key_fingerprints(self, tenant_id: uuid.UUID) -> set[str]:
         return set(self._fingerprints.get(tenant_id, set()))
+
+    def accept_ir_keys(self, tenant_id: uuid.UUID, fingerprints: Iterable[str]) -> None:
+        self._ir_fingerprints[tenant_id] = {
+            str(item).strip().lower() for item in fingerprints if str(item).strip()
+        }
+
+    def ir_key_fingerprints(self, tenant_id: uuid.UUID) -> set[str]:
+        return set(self._ir_fingerprints.get(tenant_id, set()))
 
     def put(self, tenant_id: uuid.UUID, ticket: CachedTicket) -> None:
         self._tickets[(tenant_id, ticket.lease_id)] = ticket

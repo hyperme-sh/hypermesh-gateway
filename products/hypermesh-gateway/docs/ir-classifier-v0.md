@@ -23,7 +23,7 @@ does **not** classify or store the prompt.
 
 | Verb | Path | Who |
 |------|------|-----|
-| `POST` | `/v1/ir/chat/completions` | ticket `purpose=ir` + existing grant |
+| `POST` | `/v1/ir/chat/completions` | ticket `purpose=ir` + AIuditor / IR grant (not a renter key) |
 | `GET` | `/v1/ir/receipts` | same grant; portal export gate |
 
 Portal IR controls (#51) still gate who may use the door / export receipts.

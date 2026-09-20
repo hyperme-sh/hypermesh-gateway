@@ -8,7 +8,8 @@ from hypermesh_gateway_service.chat import INSTANCE_NOT_READY
 from hypermesh_gateway_service.receipts import ReceiptStore, sanitize_receipt_payload
 from conftest import stub_api_key_validator
 from test_hypermesh_gateway import (
-    TEST_RENTER_FINGERPRINTS,
+    TEST_IR_FINGERPRINTS,
+    _ir as ir_headers,
     _mock_runtime,
     _renter as renter_headers,
     _signed_ticket,
@@ -71,6 +72,22 @@ async def test_ir_door_rejects_renter_purpose_as_instance_not_ready(
     assert refused.json()["detail"] == INSTANCE_NOT_READY
 
 
+@pytest.mark.asyncio
+async def test_ir_door_rejects_renter_key_even_when_ticket_is_ir(
+    http_client, tenant_headers, app, tenant_id
+):
+    lease_id = uuid.uuid4()
+    app.state.ticket_cache.put(tenant_id, _signed_ticket(lease_id, purpose="ir"))
+    _mock_runtime(app)
+    refused = await http_client.post(
+        "/v1/ir/chat/completions",
+        headers=renter_headers(tenant_headers),
+        json={"lease_id": str(lease_id), "messages": [{"role": "user", "content": "hi"}]},
+    )
+    assert refused.status_code == 401
+    assert app.state.receipt_store.count_for(tenant_id) == 0
+
+
 class _HoldAllClassifier:
     pack_version = "test-hold-all"
 
@@ -91,7 +108,7 @@ async def test_ir_door_allows_authorized_work_and_holds_receipt(
     prompt = "Triage this SIEM alert and list containment steps."
     chat = await http_client.post(
         "/v1/ir/chat/completions",
-        headers=renter_headers(tenant_headers),
+        headers=ir_headers(tenant_headers),
         json={"lease_id": str(lease_id), "messages": [{"role": "user", "content": prompt}]},
     )
     assert chat.status_code == 200
@@ -148,7 +165,7 @@ async def test_ir_door_holds_out_of_scope_and_does_not_proxy(
     prompt = "Write a haiku about coffee."
     held = await http_client.post(
         "/api/v1/hypermesh-gateway/v1/ir/chat/completions",
-        headers=renter_headers(tenant_headers),
+        headers=ir_headers(tenant_headers),
         json={"lease_id": str(lease_id), "messages": [{"role": "user", "content": prompt}]},
     )
     assert held.status_code == 200
@@ -174,7 +191,7 @@ async def test_ir_receipts_export_has_no_prompt_body(
     prompt = "secret prompt must never be exported"
     await http_client.post(
         "/v1/ir/chat/completions",
-        headers=renter_headers(tenant_headers),
+        headers=ir_headers(tenant_headers),
         json={"lease_id": str(lease_id), "messages": [{"role": "user", "content": prompt}]},
     )
     app.state.api_key_validator = stub_api_key_validator(tenant_id)
@@ -230,14 +247,14 @@ async def test_ir_door_uses_injected_classifier_without_proxy(
 
     async with LifespanManager(app):
         app.state.ticket_cache.put(tenant_id, _signed_ticket(lease_id, purpose="ir"))
-        app.state.ticket_cache.accept_keys(tenant_id, TEST_RENTER_FINGERPRINTS)
+        app.state.ticket_cache.accept_ir_keys(tenant_id, TEST_IR_FINGERPRINTS)
         app.state.runtime_client = httpx.AsyncClient(transport=httpx.MockTransport(boom))
         transport = httpx.ASGITransport(app=app)
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
             with caplog.at_level("INFO"):
                 held = await client.post(
                     "/v1/ir/chat/completions",
-                    headers=renter_headers(tenant_headers),
+                    headers=ir_headers(tenant_headers),
                     json={
                         "lease_id": str(lease_id),
                         "messages": [{"role": "user", "content": prompt}],
@@ -324,13 +341,13 @@ async def test_ir_door_receipts_reload_from_file(
 
     async with LifespanManager(first_app):
         first_app.state.ticket_cache.put(tenant_id, _signed_ticket(lease_id, purpose="ir"))
-        first_app.state.ticket_cache.accept_keys(tenant_id, TEST_RENTER_FINGERPRINTS)
+        first_app.state.ticket_cache.accept_ir_keys(tenant_id, TEST_IR_FINGERPRINTS)
         _mock_runtime(first_app)
         transport = httpx.ASGITransport(app=first_app)
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
             chat = await client.post(
                 "/v1/ir/chat/completions",
-                headers=renter_headers(tenant_headers),
+                headers=ir_headers(tenant_headers),
                 json={
                     "lease_id": str(lease_id),
                     "messages": [{"role": "user", "content": prompt}],

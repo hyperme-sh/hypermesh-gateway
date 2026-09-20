@@ -132,10 +132,16 @@ class HttpControlPlane:
             for item in body.get("key_fingerprints") or []
             if str(item).strip()
         ]
+        ir_fingerprints = [
+            str(item).strip().lower()
+            for item in body.get("ir_key_fingerprints") or []
+            if str(item).strip()
+        ]
         return TicketPull(
             tickets=tickets,
             revoked_lease_ids=revoked,
             key_fingerprints=fingerprints,
+            ir_key_fingerprints=ir_fingerprints,
         )
 
     async def post_metrics(
@@ -207,6 +213,7 @@ class FakeControlPlane:
             tickets=list(self.ticket_pull.tickets),
             revoked_lease_ids=list(self.ticket_pull.revoked_lease_ids),
             key_fingerprints=list(self.ticket_pull.key_fingerprints),
+            ir_key_fingerprints=list(self.ticket_pull.ir_key_fingerprints),
         )
 
     async def post_metrics(
