@@ -28,15 +28,19 @@ from hypermesh_service.ticket import renter_key_fingerprint
 
 
 class _AcceptJwt:
-    def __init__(self, token: str) -> None:
+    def __init__(self, token: str, tenant_id: uuid.UUID | None = None) -> None:
         self.token = token
+        self.tenant_id = tenant_id
         self.calls = 0
 
     def validate_sync(self, token: str) -> dict[str, object]:
         self.calls += 1
         if token != self.token:
             raise InvalidTokenError("rejected")
-        return {"sub": "portal-user", "azp": "controlplane-frontend"}
+        claims: dict[str, object] = {"sub": "portal-user", "azp": "controlplane-frontend"}
+        if self.tenant_id is not None:
+            claims["https://panopticon.dev/tenant_id"] = str(self.tenant_id)
+        return claims
 
     async def validate(self, token: str) -> dict[str, object]:
         return self.validate_sync(token)
@@ -161,7 +165,7 @@ def test_require_renter_grant_x_api_key_header():
 
 
 def test_require_renter_grant_portal_jwt(tenant_id):
-    validator = _AcceptJwt("portal.jwt.token")
+    validator = _AcceptJwt("portal.jwt.token", tenant_id)
     grant = require_renter_grant(
         _request(
             authorization="Bearer portal.jwt.token",
@@ -184,6 +188,35 @@ def test_require_renter_grant_exchange_jwt(tenant_id):
         _request(authorization=f"Bearer {token}", tenant_id=tenant_id)
     )
     assert grant.kind == "jwt"
+
+
+def test_require_renter_grant_rejects_jwt_without_tenant_claim(tenant_id):
+    validator = _AcceptJwt("portal.jwt.token")
+    with pytest.raises(RenterUnauthorized):
+        require_renter_grant(
+            _request(
+                authorization="Bearer portal.jwt.token",
+                tenant_id=tenant_id,
+                validator=validator,
+            )
+        )
+
+
+def test_require_renter_grant_rejects_jwt_with_neither_header_nor_claim():
+    validator = _AcceptJwt("portal.jwt.token")
+    with pytest.raises(RenterUnauthorized):
+        require_renter_grant(
+            _request(authorization="Bearer portal.jwt.token", validator=validator)
+        )
+
+
+def test_require_renter_grant_accepts_jwt_tenant_claim_without_header(tenant_id):
+    validator = _AcceptJwt("portal.jwt.token", tenant_id)
+    grant = require_renter_grant(
+        _request(authorization="Bearer portal.jwt.token", validator=validator)
+    )
+    assert grant.kind == "jwt"
+    assert grant.subject == "portal-user"
 
 
 def test_require_renter_grant_rejects_wrong_identities_and_bad_jwt():
