@@ -15,6 +15,8 @@ from api.interfaces.api_controllers.health_endpoint import router as health_rout
 
 from hypermesh_gateway_service.classify import Classifier, resolve_classifier
 from hypermesh_gateway_service.control_plane import ControlPlane, resolve_control_plane
+from hypermesh_gateway_service.metrics import MeterQueue, resolve_meter_queue
+from hypermesh_gateway_service.quota import ChatQuota, resolve_chat_quota
 from hypermesh_gateway_service.receipts import ReceiptStore, resolve_receipt_store
 from hypermesh_gateway_service.routes import (
     openai_router,
@@ -45,6 +47,9 @@ def create_app(
     service_name: str | None = None,
     receipt_store: ReceiptStore | None = None,
     receipt_persist_path: str | None = None,
+    meter_queue: MeterQueue | None = None,
+    meter_persist_path: str | None = None,
+    chat_quota: ChatQuota | None = None,
     classifier: Classifier | None = None,
 ) -> FastAPI:
     @asynccontextmanager
@@ -54,6 +59,8 @@ def create_app(
         app.state.ticket_cache = TicketCache()
         seed_watched_tenants(app.state.ticket_cache)
         app.state.receipt_store = receipt_store or resolve_receipt_store(receipt_persist_path)
+        app.state.meter_queue = meter_queue or resolve_meter_queue(meter_persist_path)
+        app.state.chat_quota = chat_quota or resolve_chat_quota()
         app.state.classifier = classifier or resolve_classifier()
         if gateway_service_secret is not None:
             app.state.gateway_service_secret = gateway_service_secret
@@ -64,7 +71,11 @@ def create_app(
             if refresh_s <= 0:
                 return
             while not stop.is_set():
-                await refresh_known_tenants(app.state.control_plane, app.state.ticket_cache)
+                await refresh_known_tenants(
+                    app.state.control_plane,
+                    app.state.ticket_cache,
+                    app.state.meter_queue,
+                )
                 try:
                     await asyncio.wait_for(stop.wait(), timeout=refresh_s)
                     return

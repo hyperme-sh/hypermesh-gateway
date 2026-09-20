@@ -54,6 +54,7 @@ class ControlPlane(Protocol):
         bytes_in: int,
         bytes_out: int,
         handshake_count: int,
+        metric_id: uuid.UUID | None = None,
     ) -> None: ...
 
 
@@ -146,18 +147,22 @@ class HttpControlPlane:
         bytes_in: int,
         bytes_out: int,
         handshake_count: int,
+        metric_id: uuid.UUID | None = None,
     ) -> None:
+        body: dict[str, Any] = {
+            "tunnel_id": str(tunnel_id) if tunnel_id else None,
+            "lease_id": str(lease_id) if lease_id else None,
+            "bytes_in": bytes_in,
+            "bytes_out": bytes_out,
+            "handshake_count": handshake_count,
+        }
+        if metric_id is not None:
+            body["id"] = str(metric_id)
         async with httpx.AsyncClient(timeout=15.0) as client:
             response = await client.post(
                 f"{self._base}/api/v1/hypermesh/gateway/metrics",
                 headers=self._headers(tenant_id),
-                json={
-                    "tunnel_id": str(tunnel_id) if tunnel_id else None,
-                    "lease_id": str(lease_id) if lease_id else None,
-                    "bytes_in": bytes_in,
-                    "bytes_out": bytes_out,
-                    "handshake_count": handshake_count,
-                },
+                json=body,
             )
         if response.status_code == 401:
             raise PermissionError("Gateway service credential required")
@@ -182,6 +187,7 @@ class FakeControlPlane:
         self.list_tunnels_calls = 0
         self.list_tickets_calls = 0
         self.post_metrics_calls = 0
+        self.fail_metrics = False
 
     async def get_lease(self, tenant_id: uuid.UUID, lease_id: uuid.UUID) -> LeaseView | None:
         self.get_lease_calls += 1
@@ -212,20 +218,24 @@ class FakeControlPlane:
         bytes_in: int,
         bytes_out: int,
         handshake_count: int,
+        metric_id: uuid.UUID | None = None,
     ) -> None:
         self.post_metrics_calls += 1
         if self.require_secret and not self.service_secret:
             raise PermissionError("Gateway service credential required")
-        self.metrics.append(
-            {
-                "tenant_id": tenant_id,
-                "tunnel_id": tunnel_id,
-                "lease_id": lease_id,
-                "bytes_in": bytes_in,
-                "bytes_out": bytes_out,
-                "handshake_count": handshake_count,
-            }
-        )
+        if self.fail_metrics:
+            raise RuntimeError("metrics plane down")
+        recorded: dict[str, Any] = {
+            "tenant_id": tenant_id,
+            "tunnel_id": tunnel_id,
+            "lease_id": lease_id,
+            "bytes_in": bytes_in,
+            "bytes_out": bytes_out,
+            "handshake_count": handshake_count,
+        }
+        if metric_id is not None:
+            recorded["metric_id"] = metric_id
+        self.metrics.append(recorded)
 
 
 def resolve_control_plane(override: ControlPlane | None = None) -> ControlPlane:
