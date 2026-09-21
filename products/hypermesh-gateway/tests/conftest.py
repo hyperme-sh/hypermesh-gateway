@@ -14,6 +14,8 @@ from hypermesh_gateway_service.tenants import MARKETPLACE_TENANT_ID
 @pytest.fixture(autouse=True)
 def _clear_ir_taxonomy_override(monkeypatch):
     monkeypatch.delenv("HYPERMESH_IR_TAXONOMY_PACK", raising=False)
+    monkeypatch.delenv("AIUDITOR_SERVICE_URL", raising=False)
+    monkeypatch.delenv("AIUDITOR_INTERNAL_TOKEN", raising=False)
     monkeypatch.setenv("HYPERMESH_IR_RECEIPT_PATH", "memory")
     monkeypatch.setattr(
         api_config.settings,

@@ -1,7 +1,7 @@
 """IR door receipts. Customer artifact. Not a Fyber product event.
 
 Held on this door. Human-exportable into a ticket or SIEM.
-Fields: who, why, what left, class, allow/hold, time.
+Fields: who, why, what left, class, allow/hold/deny, time.
 No prompt body. No completion body. Never publish on Azure Monitor,
 Service Bus, or hypermesh.* events.
 """
@@ -16,7 +16,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Literal
 
-Decision = Literal["allow", "hold"]
+Decision = Literal["allow", "hold", "deny"]
 
 RECEIPT_KEYS = frozenset(
     {
@@ -166,7 +166,7 @@ class ReceiptStore:
                 )
             except (ValueError, KeyError):
                 continue
-            if receipt.decision not in {"allow", "hold"}:
+            if receipt.decision not in {"allow", "hold", "deny"}:
                 continue
             bucket = self._rows.setdefault(receipt.tenant_id, [])
             bucket.append(receipt)
