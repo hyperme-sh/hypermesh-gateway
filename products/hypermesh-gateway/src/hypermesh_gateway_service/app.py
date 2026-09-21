@@ -15,6 +15,7 @@ from api.interfaces.api_controllers.health_endpoint import router as health_rout
 
 from hypermesh_gateway_service.classify import Classifier, resolve_classifier
 from hypermesh_gateway_service.control_plane import ControlPlane, resolve_control_plane
+from hypermesh_gateway_service.inbox import ApprovalInbox, resolve_approval_inbox
 from hypermesh_gateway_service.metrics import MeterQueue, resolve_meter_queue
 from hypermesh_gateway_service.quota import ChatQuota, resolve_chat_quota
 from hypermesh_gateway_service.receipts import ReceiptStore, resolve_receipt_store
@@ -35,7 +36,9 @@ _OPENAPI_DESCRIPTION = (
     "After the ticket is issued, chat does not call Panopticon or Keycloak. "
     "Opt-in IR door at /v1/ir/chat/completions classifies a small set "
     "(versioned taxonomy pack, not a detector) and holds a customer receipt "
-    "on this door. Default chat does not classify. "
+    "on this door. A classify hold files /api/v1/aiuditor/approvals when "
+    "AIUDITOR_SERVICE_URL is set; retry resumes or denies from that inbox. "
+    "Default chat does not classify. "
     "Host addresses are not published here. Test chat: https://chat.test.hyperme.sh"
 )
 
@@ -51,6 +54,7 @@ def create_app(
     meter_persist_path: str | None = None,
     chat_quota: ChatQuota | None = None,
     classifier: Classifier | None = None,
+    approval_inbox: ApprovalInbox | None = None,
 ) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -62,6 +66,7 @@ def create_app(
         app.state.meter_queue = meter_queue or resolve_meter_queue(meter_persist_path)
         app.state.chat_quota = chat_quota or resolve_chat_quota()
         app.state.classifier = classifier or resolve_classifier()
+        app.state.approval_inbox = resolve_approval_inbox(approval_inbox)
         if gateway_service_secret is not None:
             app.state.gateway_service_secret = gateway_service_secret
         refresh_s = float(os.environ.get("HYPERMESH_ASSIGNMENT_REFRESH_S", "30"))
