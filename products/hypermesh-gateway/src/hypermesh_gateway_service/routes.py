@@ -20,6 +20,11 @@ from hypermesh_gateway_service.inbox import (
     InboxView,
     resolve_approval_inbox,
 )
+from hypermesh_gateway_service.policy import (
+    PolicyView,
+    decide_policy,
+    policy_needs_classify,
+)
 from hypermesh_gateway_service.metrics import (
     MeterQueue,
     flush_meter_queue,
@@ -380,6 +385,43 @@ async def _chat(request: Request, body: ChatCompletionRequest) -> StreamingRespo
         raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
     _bind_renter_to_ticket(request, grant, claims, tenant_id, cache)
     _require_door_capacity(request, lease_id)
+    purpose = claims.purpose
+    policies = await _load_policies(request, tenant_id, purpose=purpose)
+    if policies:
+        from hypermesh_gateway_service.classify import prompt_text_from_messages
+
+        prompt_class = None
+        taxonomy = "allow"
+        if policy_needs_classify(policies):
+            classified = _classifier(request).classify(
+                prompt_text_from_messages(body.messages)
+            )
+            prompt_class = classified.prompt_class
+            taxonomy = classified.decision
+        decision = decide_policy(
+            purpose, policies, prompt_class=prompt_class, taxonomy_decision=taxonomy
+        )
+        if decision == "deny":
+            return _policy_deny(
+                request,
+                tenant_id=tenant_id,
+                lease_id=lease_id,
+                who=grant.subject,
+                prompt_class=prompt_class or "unclassified",
+                why=purpose,
+            )
+        if decision == "hold":
+            gated = await _hold_or_resume(
+                request,
+                tenant_id=tenant_id,
+                lease_id=lease_id,
+                who=grant.subject,
+                prompt_class=prompt_class or "unclassified",
+                purpose=purpose,
+                why=purpose,
+            )
+            if gated is not None:
+                return gated
     runtime = getattr(request.app.state, "runtime_client", None)
     proxied = await proxy_chat(
         lease_id=lease_id,
@@ -423,8 +465,116 @@ def _inbox_outcome(view: InboxView | None) -> str:
     return "hold"
 
 
+async def _load_policies(
+    request: Request, tenant_id: uuid.UUID, *, purpose: str
+) -> list[PolicyView]:
+    try:
+        return await _inbox(request).policies(tenant_id, purpose=purpose)
+    except InboxUnavailable:
+        return []
+
+
+def _policy_deny(
+    request: Request,
+    *,
+    tenant_id: uuid.UUID,
+    lease_id: uuid.UUID,
+    who: str,
+    prompt_class: str,
+    why: str,
+) -> JSONResponse:
+    receipt = _receipts(request).record(
+        tenant_id=tenant_id,
+        lease_id=lease_id,
+        who=who,
+        why=why,
+        what_left="none",
+        prompt_class=prompt_class,
+        decision="deny",
+    )
+    return JSONResponse(
+        status_code=409,
+        content={"decision": "deny", "receipt": receipt.as_export()},
+    )
+
+
+async def _hold_or_resume(
+    request: Request,
+    *,
+    tenant_id: uuid.UUID,
+    lease_id: uuid.UUID,
+    who: str,
+    prompt_class: str,
+    purpose: str,
+    why: str,
+) -> dict[str, object] | JSONResponse | None:
+    """Hold/deny from the inbox. None means resume (proxy)."""
+
+    inbox = _inbox(request)
+    store = _receipts(request)
+    view: InboxView | None = None
+    try:
+        view = await inbox.latest(
+            tenant_id,
+            lease_id=lease_id,
+            who=who,
+            prompt_class=prompt_class,
+        )
+    except InboxUnavailable:
+        view = None
+    outcome = _inbox_outcome(view)
+    if outcome == "allow" and view is not None and view.decision == "allow_once":
+        try:
+            view = await inbox.consume(tenant_id, view.id)
+        except InboxUnavailable:
+            outcome = "hold"
+    if outcome == "allow":
+        return None
+    if outcome == "deny":
+        receipt = store.record(
+            tenant_id=tenant_id,
+            lease_id=lease_id,
+            who=who,
+            why=why,
+            what_left="none",
+            prompt_class=prompt_class,
+            decision="deny",
+        )
+        body_out: dict[str, object] = {
+            "decision": "deny",
+            "receipt": receipt.as_export(),
+        }
+        if view is not None:
+            body_out["approval_id"] = str(view.id)
+        return JSONResponse(status_code=409, content=body_out)
+    if view is None or view.status != "held":
+        try:
+            view = await inbox.hold(
+                tenant_id,
+                lease_id=lease_id,
+                who=who,
+                prompt_class=prompt_class,
+                purpose=purpose,
+            )
+        except InboxUnavailable:
+            view = None
+    receipt = store.record(
+        tenant_id=tenant_id,
+        lease_id=lease_id,
+        who=who,
+        why=why,
+        what_left="none",
+        prompt_class=prompt_class,
+        decision="hold",
+    )
+    held: dict[str, object] = {"decision": "hold", "receipt": receipt.as_export()}
+    if view is not None:
+        held["approval_id"] = str(view.id)
+    return held
+
+
 async def _ir_chat(request: Request, body: ChatCompletionRequest):
-    """Opt-in IR door. Classify. Allow, hold, or resume from the inbox."""
+    """Opt-in IR door. Classify, then org policy, then inbox."""
 
     grant = require_auditor_grant(request)
     tenant_id = _tenant_id(request)
@@ -454,69 +604,34 @@ async def _ir_chat(request: Request, body: ChatCompletionRequest):
         classified.pack_version,
     )
     store = _receipts(request)
-    view: InboxView | None = None
-    if classified.decision == "hold":
-        inbox = _inbox(request)
-        try:
-            view = await inbox.latest(
-                tenant_id,
-                lease_id=lease_id,
-                who=grant.subject,
-                prompt_class=classified.prompt_class,
-            )
-        except InboxUnavailable:
-            view = None
-        outcome = _inbox_outcome(view)
-        if outcome == "allow" and view is not None and view.decision == "allow_once":
-            try:
-                view = await inbox.consume(tenant_id, view.id)
-            except InboxUnavailable:
-                outcome = "hold"
-        if outcome == "deny":
-            receipt = store.record(
-                tenant_id=tenant_id,
-                lease_id=lease_id,
-                who=grant.subject,
-                why="ir",
-                what_left="none",
-                prompt_class=classified.prompt_class,
-                decision="deny",
-            )
-            body_out: dict[str, object] = {
-                "decision": "deny",
-                "receipt": receipt.as_export(),
-            }
-            if view is not None:
-                body_out["approval_id"] = str(view.id)
-            return JSONResponse(status_code=409, content=body_out)
-        if outcome == "hold":
-            if view is None or view.status != "held":
-                try:
-                    view = await inbox.hold(
-                        tenant_id,
-                        lease_id=lease_id,
-                        who=grant.subject,
-                        prompt_class=classified.prompt_class,
-                        purpose="ir",
-                    )
-                except InboxUnavailable:
-                    view = None
-            receipt = store.record(
-                tenant_id=tenant_id,
-                lease_id=lease_id,
-                who=grant.subject,
-                why="ir",
-                what_left="none",
-                prompt_class=classified.prompt_class,
-                decision="hold",
-            )
-            held: dict[str, object] = {
-                "decision": "hold",
-                "receipt": receipt.as_export(),
-            }
-            if view is not None:
-                held["approval_id"] = str(view.id)
-            return held
+    policies = await _load_policies(request, tenant_id, purpose="ir")
+    decision = decide_policy(
+        "ir",
+        policies,
+        prompt_class=classified.prompt_class,
+        taxonomy_decision=classified.decision,
+    )
+    if decision == "deny":
+        return _policy_deny(
+            request,
+            tenant_id=tenant_id,
+            lease_id=lease_id,
+            who=grant.subject,
+            prompt_class=classified.prompt_class,
+            why="ir",
+        )
+    if decision == "hold":
+        gated = await _hold_or_resume(
+            request,
+            tenant_id=tenant_id,
+            lease_id=lease_id,
+            who=grant.subject,
+            prompt_class=classified.prompt_class,
+            purpose="ir",
+            why="ir",
+        )
+        if gated is not None:
+            return gated
     runtime = getattr(request.app.state, "runtime_client", None)
     try:
         proxied = await proxy_chat(

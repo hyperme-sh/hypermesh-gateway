@@ -38,7 +38,8 @@ _OPENAPI_DESCRIPTION = (
     "(versioned taxonomy pack, not a detector) and holds a customer receipt "
     "on this door. A classify hold files /api/v1/aiuditor/approvals when "
     "AIUDITOR_SERVICE_URL is set; retry resumes or denies from that inbox. "
-    "Default chat does not classify. "
+    "Org policy can allow, hold, or deny by purpose and class. "
+    "Default renter chat does not classify unless the org opts in. "
     "Host addresses are not published here. Test chat: https://chat.test.hyperme.sh"
 )
 

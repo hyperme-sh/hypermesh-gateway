@@ -14,6 +14,8 @@ from typing import Protocol
 
 import httpx
 
+from hypermesh_gateway_service.policy import PolicyView
+
 INBOX_UNAVAILABLE = "AIuditor approval inbox hop failed"
 INBOX_REQUIRED = "AIUDITOR_SERVICE_URL is required to file a hold"
 
@@ -61,6 +63,10 @@ class ApprovalInbox(Protocol):
         self, tenant_id: uuid.UUID, approval_id: uuid.UUID
     ) -> InboxView: ...
 
+    async def policies(
+        self, tenant_id: uuid.UUID, *, purpose: str | None = None
+    ) -> list[PolicyView]: ...
+
 
 class ClosedApprovalInbox:
     """Fail open when the plane hop is not configured. Receipt-only hold."""
@@ -90,6 +96,11 @@ class ClosedApprovalInbox:
         self, tenant_id: uuid.UUID, approval_id: uuid.UUID
     ) -> InboxView:
         raise InboxUnavailable(INBOX_REQUIRED)
+
+    async def policies(
+        self, tenant_id: uuid.UUID, *, purpose: str | None = None
+    ) -> list[PolicyView]:
+        return []
 
 
 class HttpApprovalInbox:
@@ -179,6 +190,25 @@ class HttpApprovalInbox:
             raise InboxUnavailable(INBOX_UNAVAILABLE)
         return _view_from_body(response.json())
 
+    async def policies(
+        self, tenant_id: uuid.UUID, *, purpose: str | None = None
+    ) -> list[PolicyView]:
+        params: dict[str, str] = {}
+        if purpose:
+            params["purpose"] = purpose
+        try:
+            async with httpx.AsyncClient(timeout=self._timeout) as client:
+                response = await client.get(
+                    f"{self._base}/api/v1/aiuditor/policies",
+                    headers=self._headers(tenant_id),
+                    params=params or None,
+                )
+        except httpx.HTTPError as exc:
+            raise InboxUnavailable(INBOX_UNAVAILABLE) from exc
+        if response.status_code >= 400:
+            raise InboxUnavailable(INBOX_UNAVAILABLE)
+        return _policies_from_body(response.json())
+
 
 def _view_from_body(body: object) -> InboxView:
     if not isinstance(body, dict):
@@ -212,16 +242,43 @@ def _view_from_body(body: object) -> InboxView:
     )
 
 
+def _policies_from_body(body: object) -> list[PolicyView]:
+    if not isinstance(body, list):
+        raise InboxUnavailable(INBOX_UNAVAILABLE)
+    rows: list[PolicyView] = []
+    for item in body:
+        if not isinstance(item, dict):
+            raise InboxUnavailable(INBOX_UNAVAILABLE)
+        raw_conn = item.get("connection_id")
+        try:
+            connection_id = uuid.UUID(str(raw_conn)) if raw_conn else None
+        except (ValueError, TypeError) as exc:
+            raise InboxUnavailable(INBOX_UNAVAILABLE) from exc
+        rows.append(
+            PolicyView(
+                purpose=str(item.get("purpose") or ""),
+                disposition=str(item.get("disposition") or ""),
+                prompt_class=(
+                    str(item["prompt_class"]) if item.get("prompt_class") else None
+                ),
+                connection_id=connection_id,
+            )
+        )
+    return rows
+
+
 @dataclass
 class FakeApprovalInbox:
     """In-process inbox for door tests. Not the AIuditor store."""
 
     rows: list[InboxView] = field(default_factory=list)
+    policy_rows: list[PolicyView] = field(default_factory=list)
     hold_calls: list[dict[str, object]] = field(default_factory=list)
     consume_calls: list[uuid.UUID] = field(default_factory=list)
     hold_error: str | None = None
     latest_error: str | None = None
     consume_error: str | None = None
+    policy_error: str | None = None
 
     def seed(self, view: InboxView) -> InboxView:
         self.rows.append(view)
@@ -319,6 +376,16 @@ class FakeApprovalInbox:
                 self.rows[index] = updated
                 return updated
         raise InboxUnavailable(INBOX_UNAVAILABLE)
+
+    async def policies(
+        self, tenant_id: uuid.UUID, *, purpose: str | None = None
+    ) -> list[PolicyView]:
+        del tenant_id
+        if self.policy_error:
+            raise InboxUnavailable(self.policy_error)
+        if purpose:
+            return [row for row in self.policy_rows if row.purpose == purpose]
+        return list(self.policy_rows)
 
 
 def resolve_approval_inbox(
