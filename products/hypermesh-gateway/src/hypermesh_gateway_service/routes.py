@@ -9,11 +9,17 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request, status
 from pydantic import BaseModel, Field
-from starlette.responses import StreamingResponse
+from starlette.responses import JSONResponse, StreamingResponse
 
 from api.common.internal_token import internal_token_matches
 from hypermesh_gateway_service.chat import ChatCompletionRequest, ProxiedChat, proxy_chat
 from hypermesh_gateway_service.control_plane import ControlPlane, GatewayTunnel
+from hypermesh_gateway_service.inbox import (
+    ApprovalInbox,
+    InboxUnavailable,
+    InboxView,
+    resolve_approval_inbox,
+)
 from hypermesh_gateway_service.metrics import (
     MeterQueue,
     flush_meter_queue,
@@ -104,6 +110,15 @@ def _classifier(request: Request):
 
     resolved = resolve_classifier()
     request.app.state.classifier = resolved
+    return resolved
+
+
+def _inbox(request: Request) -> ApprovalInbox:
+    existing = getattr(request.app.state, "approval_inbox", None)
+    if existing is not None:
+        return existing
+    resolved = resolve_approval_inbox()
+    request.app.state.approval_inbox = resolved
     return resolved
 
 
@@ -390,8 +405,26 @@ async def _chat(request: Request, body: ChatCompletionRequest) -> StreamingRespo
     return _stream_chat(proxied, after_bytes=_meter)
 
 
+def _inbox_outcome(view: InboxView | None) -> str:
+    """allow, deny, or hold. Consumed allow_once is a new ask."""
+
+    if view is None:
+        return "hold"
+    if view.status == "allowed" and view.decision == "allow_session":
+        return "allow"
+    if (
+        view.status == "allowed"
+        and view.decision == "allow_once"
+        and not view.consumed
+    ):
+        return "allow"
+    if view.status in {"denied", "timed_out"}:
+        return "deny"
+    return "hold"
+
+
 async def _ir_chat(request: Request, body: ChatCompletionRequest):
-    """Opt-in IR door. Classify. Allow or hold. Receipt stays on this door."""
+    """Opt-in IR door. Classify. Allow, hold, or resume from the inbox."""
 
     grant = require_auditor_grant(request)
     tenant_id = _tenant_id(request)
@@ -421,17 +454,69 @@ async def _ir_chat(request: Request, body: ChatCompletionRequest):
         classified.pack_version,
     )
     store = _receipts(request)
+    view: InboxView | None = None
     if classified.decision == "hold":
-        receipt = store.record(
-            tenant_id=tenant_id,
-            lease_id=lease_id,
-            who=grant.subject,
-            why="ir",
-            what_left="none",
-            prompt_class=classified.prompt_class,
-            decision="hold",
-        )
-        return {"decision": "hold", "receipt": receipt.as_export()}
+        inbox = _inbox(request)
+        try:
+            view = await inbox.latest(
+                tenant_id,
+                lease_id=lease_id,
+                who=grant.subject,
+                prompt_class=classified.prompt_class,
+            )
+        except InboxUnavailable:
+            view = None
+        outcome = _inbox_outcome(view)
+        if outcome == "allow" and view is not None and view.decision == "allow_once":
+            try:
+                view = await inbox.consume(tenant_id, view.id)
+            except InboxUnavailable:
+                outcome = "hold"
+        if outcome == "deny":
+            receipt = store.record(
+                tenant_id=tenant_id,
+                lease_id=lease_id,
+                who=grant.subject,
+                why="ir",
+                what_left="none",
+                prompt_class=classified.prompt_class,
+                decision="deny",
+            )
+            body_out: dict[str, object] = {
+                "decision": "deny",
+                "receipt": receipt.as_export(),
+            }
+            if view is not None:
+                body_out["approval_id"] = str(view.id)
+            return JSONResponse(status_code=409, content=body_out)
+        if outcome == "hold":
+            if view is None or view.status != "held":
+                try:
+                    view = await inbox.hold(
+                        tenant_id,
+                        lease_id=lease_id,
+                        who=grant.subject,
+                        prompt_class=classified.prompt_class,
+                        purpose="ir",
+                    )
+                except InboxUnavailable:
+                    view = None
+            receipt = store.record(
+                tenant_id=tenant_id,
+                lease_id=lease_id,
+                who=grant.subject,
+                why="ir",
+                what_left="none",
+                prompt_class=classified.prompt_class,
+                decision="hold",
+            )
+            held: dict[str, object] = {
+                "decision": "hold",
+                "receipt": receipt.as_export(),
+            }
+            if view is not None:
+                held["approval_id"] = str(view.id)
+            return held
     runtime = getattr(request.app.state, "runtime_client", None)
     try:
         proxied = await proxy_chat(
