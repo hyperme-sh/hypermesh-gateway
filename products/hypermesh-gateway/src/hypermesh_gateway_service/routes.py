@@ -43,7 +43,7 @@ from hypermesh_gateway_service.renter_auth import (
 )
 from hypermesh_gateway_service.tenants import MARKETPLACE_TENANT_ID
 from hypermesh_gateway_service.tickets import TicketCache
-from hypermesh_gateway_service.wg import apply_gateway, peer_counters, peer_is_up
+from hypermesh_gateway_service.wg import apply_gateway, peer_counters, peer_is_up, remove_peer
 from hypermesh_service.ticket import (
     TicketClaims,
     TicketNotReady,
@@ -147,15 +147,38 @@ def seed_watched_tenants(cache: TicketCache) -> None:
 
 
 def apply_allocated_tunnels(tunnels: list[GatewayTunnel]) -> int:
-    """Apply each allocated host peer once. Skip incomplete / revoked rows."""
+    """Apply each allocated host peer. Drop a peer only when no live tunnel keeps it.
 
-    applied = 0
+    A standing wg-hm iface still gets the peer. Lease end does not revoke the
+    tunnel, so this does not drop a peer on lease_start or lease_stop.
+    """
+
+    live = {
+        tunnel.peer_public_key
+        for tunnel in tunnels
+        if tunnel.status == "allocated"
+        and tunnel.server_private_key
+        and tunnel.peer_public_key
+    }
     for tunnel in tunnels:
-        if tunnel.status != "allocated" or not tunnel.server_private_key or not tunnel.peer_public_key:
+        key = tunnel.peer_public_key
+        if tunnel.status == "revoked" and key and key not in live:
+            remove_peer(key)
+    applied = 0
+    seen: set[str] = set()
+    for tunnel in tunnels:
+        key = tunnel.peer_public_key
+        if (
+            tunnel.status != "allocated"
+            or not tunnel.server_private_key
+            or not key
+            or key in seen
+        ):
             continue
+        seen.add(key)
         apply_gateway(
             server_private_key=tunnel.server_private_key,
-            peer_public_key=tunnel.peer_public_key,
+            peer_public_key=key,
             client_address=tunnel.client_address,
         )
         applied += 1
