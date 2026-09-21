@@ -1,8 +1,9 @@
 """Apply the gateway side of a real WireGuard host peer.
 
-One WireGuard peer per HOST, not per lease. Apply that peer once. Do not
-add or drop a peer on lease_start or lease_stop. remove_peer is host
-teardown only (Path B fail / device revoke).
+One WireGuard peer per HOST, not per lease. Apply that peer once. A standing
+wg-hm iface still receives the peer. Do not add or drop a peer on
+lease_start or lease_stop. remove_peer is host teardown only (Path B fail /
+device revoke).
 
 Panopticon assigns keys. This process holds the gateway private key and
 calls `wg` / `ip` (CAP_NET_ADMIN, /dev/net/tun). Missing tun is a no-op
@@ -63,8 +64,7 @@ def apply_gateway(
         key_path = handle.name
     try:
         os.chmod(key_path, 0o600)
-        _run(["ip", "link", "add", WG_IFACE, "type", "wireguard"])
-        _run(["wg", "set", WG_IFACE, "listen-port", str(listen_port), "private-key", key_path])
+        _ensure_iface(listen_port, key_path)
         _run(
             [
                 "wg",
@@ -76,7 +76,7 @@ def apply_gateway(
                 peer_ip + "/32",
             ]
         )
-        _run(["ip", "address", "add", WG_GATEWAY_ADDR, "dev", WG_IFACE])
+        _ensure_address()
         _run(["ip", "link", "set", WG_IFACE, "up"])
         _applied_host_peers.add(peer_public_key)
         logger.info("wireguard gateway applied on %s", WG_IFACE)
@@ -89,6 +89,23 @@ def apply_gateway(
             os.unlink(key_path)
         except OSError:
             pass
+
+
+def _ensure_iface(listen_port: int, key_path: str) -> None:
+    """Create wg-hm once. A standing iface must still accept `wg set`."""
+
+    try:
+        _run(["ip", "link", "add", WG_IFACE, "type", "wireguard"])
+    except subprocess.CalledProcessError:
+        logger.info("wireguard iface %s already present", WG_IFACE)
+    _run(["wg", "set", WG_IFACE, "listen-port", str(listen_port), "private-key", key_path])
+
+
+def _ensure_address() -> None:
+    try:
+        _run(["ip", "address", "add", WG_GATEWAY_ADDR, "dev", WG_IFACE])
+    except subprocess.CalledProcessError:
+        logger.info("wireguard address already present on %s", WG_IFACE)
 
 
 def remove_peer(peer_public_key: str) -> None:

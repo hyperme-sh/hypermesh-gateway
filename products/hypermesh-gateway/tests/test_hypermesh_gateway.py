@@ -754,6 +754,44 @@ async def test_refresh_known_tenants_does_not_remove_peer(
 
 
 @pytest.mark.asyncio
+async def test_refresh_known_tenants_drops_a_revoked_host_peer(
+    tenant_id, control_plane, monkeypatch
+):
+    from hypermesh_gateway_service.routes import refresh_known_tenants
+    from hypermesh_gateway_service.tickets import TicketCache
+
+    removed: list[str] = []
+    monkeypatch.setattr(
+        "hypermesh_gateway_service.routes.remove_peer",
+        lambda key: removed.append(key),
+    )
+    monkeypatch.setattr(
+        "hypermesh_gateway_service.routes.apply_gateway",
+        lambda **kwargs: None,
+    )
+    revoked = _allocated_tunnel(uuid.uuid4())
+    control_plane.tunnels.append(
+        GatewayTunnel(
+            tunnel_id=revoked.tunnel_id,
+            lease_id=revoked.lease_id,
+            status="revoked",
+            endpoint=revoked.endpoint,
+            server_private_key=None,
+            server_public_key=revoked.server_public_key,
+            peer_public_key="revoked-peer",
+            allowed_ips=revoked.allowed_ips,
+            client_address=revoked.client_address,
+        )
+    )
+    cache = TicketCache()
+    cache.watch(tenant_id)
+
+    await refresh_known_tenants(control_plane, cache)
+
+    assert removed == ["revoked-peer"]
+
+
+@pytest.mark.asyncio
 async def test_tunnels_apply_uses_same_allocated_apply_path(
     http_client, tenant_headers, control_plane, monkeypatch
 ):
