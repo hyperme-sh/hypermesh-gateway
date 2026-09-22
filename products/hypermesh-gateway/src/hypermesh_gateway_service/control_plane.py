@@ -124,6 +124,13 @@ class HttpControlPlane:
                     exp=exp,
                     device_id=uuid.UUID(str(device_raw)) if device_raw else None,
                     path_b_state=str(row.get("path_b_state") or ""),
+                    catalog_id=str(row["catalog_id"]).strip() if row.get("catalog_id") else None,
+                    catalog_origin=(
+                        str(row["catalog_origin"]).strip()
+                        if row.get("catalog_origin")
+                        else None
+                    ),
+                    catalog_admitted=bool(row.get("catalog_admitted")),
                 )
             )
         revoked = [uuid.UUID(str(item)) for item in body.get("revoked_lease_ids", [])]

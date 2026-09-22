@@ -14,6 +14,8 @@ from typing import Iterable
 from hypermesh_service.ticket import TicketClaims, TicketNotReady, honor_ticket
 
 PATH_B_GREEN = "green"
+# Enrolled hosts stamp green via compact_cert; lab hosts via path_b. Same wire.
+COMPACT_CERT_GREEN = PATH_B_GREEN
 
 
 @dataclass(frozen=True)
@@ -28,6 +30,9 @@ class CachedTicket:
     path_b_state: str = ""
     tunnel_id: uuid.UUID | None = None
     peer_public_key: str | None = None
+    catalog_id: str | None = None
+    catalog_origin: str | None = None
+    catalog_admitted: bool = False
 
     @property
     def active(self) -> bool:
