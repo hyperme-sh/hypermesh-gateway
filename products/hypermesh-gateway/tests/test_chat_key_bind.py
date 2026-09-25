@@ -6,7 +6,6 @@ import uuid
 
 import pytest
 
-from hypermesh_gateway_service.renter_auth import RENTER_AUTH_REQUIRED
 from hypermesh_service.ticket import renter_key_fingerprint
 from test_hypermesh_gateway import _AcceptJwt, _mock_runtime, _signed_ticket
 
@@ -24,7 +23,7 @@ async def test_forged_api_key_cannot_use_paid_ticket(
         json={"lease_id": str(lease_id), "messages": [{"role": "user", "content": "hi"}]},
     )
     assert refused.status_code == 401
-    assert refused.json()["detail"] == RENTER_AUTH_REQUIRED
+    assert refused.json()["error"]["code"] == "invalid_api_key"
     assert control_plane.get_lease_calls == 0
     assert control_plane.list_tickets_calls == 0
 
@@ -43,7 +42,7 @@ async def test_portal_jwt_without_tenant_claim_cannot_use_paid_ticket(
         json={"lease_id": str(lease_id), "messages": [{"role": "user", "content": "hi"}]},
     )
     assert refused.status_code == 401
-    assert refused.json()["detail"] == RENTER_AUTH_REQUIRED
+    assert refused.json()["error"]["code"] == "invalid_api_key"
     assert control_plane.get_lease_calls == 0
 
 
@@ -60,8 +59,8 @@ async def test_portal_jwt_for_other_tenant_cannot_use_paid_ticket(
         headers={**tenant_headers, "Authorization": "Bearer portal.jwt.token"},
         json={"lease_id": str(lease_id), "messages": [{"role": "user", "content": "hi"}]},
     )
-    assert refused.status_code == 401
-    assert refused.json()["detail"] == RENTER_AUTH_REQUIRED
+    assert refused.status_code == 403
+    assert refused.json()["error"]["code"] == "tenant_mismatch"
     assert control_plane.get_lease_calls == 0
 
 

@@ -4,7 +4,7 @@ import asyncio
 import os
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request, status
+from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.responses import JSONResponse
 
 from api.common.exceptions import ForbiddenException, UnauthorizedException
@@ -14,6 +14,7 @@ from api.infrastructure.service_cors import add_optional_service_cors
 from api.interfaces.api_controllers.health_endpoint import router as health_router
 
 from hypermesh_gateway_service.classify import Classifier, resolve_classifier
+from hypermesh_gateway_service.errors import INVALID_API_KEY_MESSAGE, DoorError, openai_error_body
 from hypermesh_gateway_service.control_plane import ControlPlane, resolve_control_plane
 from hypermesh_gateway_service.inbox import ApprovalInbox, resolve_approval_inbox
 from hypermesh_gateway_service.metrics import MeterQueue, resolve_meter_queue
@@ -105,6 +106,28 @@ def create_app(
         description=_OPENAPI_DESCRIPTION,
         version="0.1.0",
     )
+
+    @app.exception_handler(DoorError)
+    async def _door_error(request: Request, exc: DoorError) -> JSONResponse:
+        if request.url.path.startswith("/v1/"):
+            return JSONResponse(
+                status_code=exc.status_code,
+                content=openai_error_body(exc.message, exc.code),
+            )
+        return JSONResponse(status_code=exc.status_code, content={"detail": exc.message})
+
+    @app.exception_handler(HTTPException)
+    async def _http_error(request: Request, exc: HTTPException) -> JSONResponse:
+        if request.url.path.startswith("/v1/") and exc.status_code == 401:
+            return JSONResponse(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                content=openai_error_body(INVALID_API_KEY_MESSAGE, "invalid_api_key"),
+            )
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={"detail": exc.detail},
+            headers=exc.headers,
+        )
 
     @app.exception_handler(UnauthorizedException)
     async def _unauthorized(_: Request, ex: UnauthorizedException) -> JSONResponse:

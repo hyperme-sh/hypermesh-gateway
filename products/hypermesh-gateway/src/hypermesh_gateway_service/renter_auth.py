@@ -176,21 +176,25 @@ def _jwt_is_auditor(claims: dict[str, Any] | None) -> bool:
     return any(role in AUDITOR_JWT_ROLES for role in roles)
 
 
-def require_auditor_grant(request: Request) -> RenterGrant:
+def require_auditor_grant(request: Request, *, bind_tenant_header: bool = True) -> RenterGrant:
     """IR classify grant. A renter key or renter-only JWT is not enough."""
 
-    grant = require_renter_grant(request)
+    grant = require_renter_grant(request, bind_tenant_header=bind_tenant_header)
     if grant.kind == "jwt" and not _jwt_is_auditor(grant.claims):
         raise RenterUnauthorized(AUDITOR_GRANT_REQUIRED)
     return grant
 
 
-def require_renter_grant(request: Request) -> RenterGrant:
-    """JWT local verify or API key. Ticket / posture stay on the chat gate."""
+def require_renter_grant(request: Request, *, bind_tenant_header: bool = True) -> RenterGrant:
+    """JWT local verify or API key. Ticket / posture stay on the chat gate.
+
+    ``bind_tenant_header`` false lets the door compare X-Tenant-ID itself and
+    answer 403 tenant_mismatch. The default still rejects a mismatched header.
+    """
 
     bearer = _bearer(request)
     header_key = _api_key_header(request)
-    tenant_hdr = request.headers.get("X-Tenant-ID")
+    tenant_hdr = request.headers.get("X-Tenant-ID") if bind_tenant_header else None
     validator = getattr(request.app.state, "renter_jwt_validator", None)
 
     if bearer:
@@ -245,8 +249,85 @@ def require_ticket_bound_grant(
     return grant
 
 
+def jwt_tenant_id(grant: RenterGrant) -> uuid.UUID | None:
+    if grant.kind != "jwt":
+        return None
+    return _uuid_claim(grant.claims)
+
+
+def _uuid_claim(claims: dict[str, Any] | None) -> uuid.UUID | None:
+    if not claims:
+        return None
+    raw = claims.get(TENANT_CLAIM) or claims.get("tenant_id")
+    if raw is None:
+        return None
+    try:
+        return uuid.UUID(str(raw))
+    except (ValueError, AttributeError, TypeError):
+        return None
+
+
+def remote_key_validate_enabled(request: Request) -> bool:
+    """True when a validator is injected or the internal token is configured."""
+
+    if getattr(request.app.state, "api_key_validator", None) is not None:
+        return True
+    from api.core.config import settings
+
+    return bool(settings.usable_api_keys_internal_token())
+
+
+async def confirm_api_key_live(
+    request: Request,
+    *,
+    tenant_id: uuid.UUID,
+    raw_key: str,
+    fingerprint: str,
+    cache: Any,
+) -> uuid.UUID | None:
+    """Re-check a key against api-keys-service at most once per TTL.
+
+    Unconfigured validate trusts the fingerprint pull. A configured check
+    that fails, or a revoked key, is unauthorized. A fresh positive result
+    is not asked again until ``cache.key_ttl_s`` (default 60s). Returns the
+    key id when the validator reported one.
+    """
+
+    if not remote_key_validate_enabled(request):
+        return cache.key_id_for(fingerprint)
+    if cache.key_is_fresh(fingerprint):
+        return cache.key_id_for(fingerprint)
+    data = await _validate_presented_key(request, raw_key=raw_key, tenant_id=tenant_id)
+    if data is None or not _tenant_claim_is(data, tenant_id):
+        cache.purge_key(fingerprint)
+        raise RenterUnauthorized()
+    key_id: uuid.UUID | None = None
+    raw_id = data.get("key_id")
+    if raw_id:
+        try:
+            key_id = uuid.UUID(str(raw_id))
+        except (ValueError, AttributeError, TypeError):
+            key_id = None
+    cache.remember_key(fingerprint, key_id)
+    return key_id
+
+
 def _api_keys_base_url() -> str:
     return os.environ.get("HYPERMESH_API_KEYS_URL", "http://api-keys-service:8000").strip()
+
+
+async def _validate_presented_key(
+    request: Request, *, raw_key: str, tenant_id: uuid.UUID
+) -> dict[str, Any] | None:
+    base_url = _api_keys_base_url()
+    if not raw_key or not base_url:
+        return None
+    validate = getattr(request.app.state, "api_key_validator", None)
+    if validate is None:
+        from api.infrastructure.externals.api_keys_client import validate_api_key_remote
+
+        validate = validate_api_key_remote
+    return await validate(base_url=base_url, api_key=raw_key, tenant_id=tenant_id)
 
 
 def _tenant_claim_is(claims: dict[str, Any] | None, tenant_id: uuid.UUID) -> bool:

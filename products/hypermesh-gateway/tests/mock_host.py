@@ -7,6 +7,7 @@ Does not log or retain the prompt body.
 from __future__ import annotations
 
 import json
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from threading import Thread
 from typing import Any
@@ -31,6 +32,8 @@ class MockHost:
         self.hits = 0
         self.last_path = ""
         self.last_content_length = 0
+        self.sse_chunks: list[bytes] | None = None
+        self.sse_delay_s = 0.0
         self._server: ThreadingHTTPServer | None = None
         self._thread: Thread | None = None
 
@@ -56,6 +59,17 @@ class MockHost:
                 owner.hits += 1
                 owner.last_path = self.path
                 owner.last_content_length = length
+                if owner.sse_chunks is not None:
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/event-stream")
+                    self.send_header("Cache-Control", "no-cache")
+                    self.end_headers()
+                    for index, chunk in enumerate(owner.sse_chunks):
+                        if index and owner.sse_delay_s:
+                            time.sleep(owner.sse_delay_s)
+                        self.wfile.write(chunk)
+                        self.wfile.flush()
+                    return
                 payload = json.dumps(MOCK_COMPLETION).encode("utf-8")
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")

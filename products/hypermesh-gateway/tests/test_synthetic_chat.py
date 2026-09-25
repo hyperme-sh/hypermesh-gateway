@@ -13,7 +13,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from hypermesh_gateway_service.chat import CHAT_PORT_ENV, INSTANCE_NOT_READY
+from hypermesh_gateway_service.chat import CHAT_PORT_ENV
 from hypermesh_gateway_service.control_plane import GatewayTunnel
 from hypermesh_gateway_service.tickets import CachedTicket, TicketPull
 from hypermesh_service.seed import (
@@ -180,7 +180,7 @@ async def test_synthetic_gateway_chat_not_ready_without_ticket(
             "messages": [{"role": "user", "content": SECRET_PROMPT}],
         },
     )
-    assert refused.status_code == 409, refused.text
-    assert refused.json()["detail"] == INSTANCE_NOT_READY
+    assert refused.status_code == 403, refused.text
+    assert refused.json()["error"]["code"] == "lease_not_owned"
     assert control_plane.get_lease_calls == 0
     assert SECRET_PROMPT not in str(control_plane.metrics)

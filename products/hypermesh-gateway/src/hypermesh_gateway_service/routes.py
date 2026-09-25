@@ -12,7 +12,19 @@ from pydantic import BaseModel, Field
 from starlette.responses import JSONResponse, StreamingResponse
 
 from api.common.internal_token import internal_token_matches
-from hypermesh_gateway_service.chat import ChatCompletionRequest, ProxiedChat, proxy_chat
+from hypermesh_gateway_service.chat import (
+    ChatCompletionRequest,
+    ProxiedChat,
+    iter_chat_bytes,
+    proxy_chat,
+)
+from hypermesh_gateway_service.errors import (
+    INVALID_API_KEY_MESSAGE,
+    LEASE_NOT_OWNED_MESSAGE,
+    NO_ACTIVE_LEASE_MESSAGE,
+    TENANT_MISMATCH_MESSAGE,
+    DoorError,
+)
 from hypermesh_gateway_service.control_plane import ControlPlane, GatewayTunnel
 from hypermesh_gateway_service.inbox import (
     ApprovalInbox,
@@ -35,18 +47,30 @@ from hypermesh_gateway_service.posture import require_chat_posture
 from hypermesh_gateway_service.receipts import ReceiptStore
 from hypermesh_gateway_service.renter_auth import (
     RenterGrant,
+    confirm_api_key_live,
+    jwt_tenant_id,
     presented_renter_key,
     require_auditor_grant,
     require_renter_grant,
     require_tenant_bound_grant,
     require_ticket_bound_grant,
 )
+from hypermesh_gateway_service.route_resolve import (
+    KeyPolicy,
+    LeaseNotOwned,
+    TenantOwnedKeyPolicy,
+    catalog_ids,
+    resolve_route,
+)
 from hypermesh_gateway_service.tenants import MARKETPLACE_TENANT_ID
 from hypermesh_gateway_service.tickets import TicketCache
 from hypermesh_gateway_service.wg import apply_gateway, peer_counters, peer_is_up, remove_peer
 from hypermesh_service.ticket import (
+    IR_CHAT_PURPOSES,
+    RENTER_CHAT_PURPOSES,
     TicketClaims,
     TicketNotReady,
+    renter_key_fingerprint,
     require_ir_chat_purpose,
     require_renter_chat_purpose,
     require_ticket_tenant,
@@ -210,6 +234,15 @@ async def refresh_known_tenants(
     A quiet plane still retries queued usage on this hop.
     """
 
+    list_index = getattr(plane, "list_key_index", None)
+    if list_index is not None:
+        try:
+            entries = await list_index()
+            cache.note_key_index(
+                (entry.tenant_id, entry.fingerprint, entry.kind) for entry in entries
+            )
+        except Exception:
+            logger.info("key index refresh skipped")
     for tenant_id in cache.known_tenants():
         try:
             tunnels = await refresh_assignments(plane, cache, tenant_id)
@@ -249,7 +282,7 @@ def _stream_chat(
 
     async def chunks():
         try:
-            async for chunk in proxied.iter_bytes():
+            async for chunk in iter_chat_bytes(proxied):
                 yield chunk
         finally:
             if after_bytes is not None:
@@ -335,6 +368,189 @@ def _lease_id(request: Request, body: ChatCompletionRequest) -> uuid.UUID:
     raise HTTPException(status_code=400, detail="lease_id is required")
 
 
+def _optional_lease_id(request: Request, body: ChatCompletionRequest) -> uuid.UUID | None:
+    if body.lease_id is None and not (
+        request.headers.get("X-Hypermesh-Lease-Id") or request.headers.get("X-Lease-Id")
+    ):
+        return None
+    return _lease_id(request, body)
+
+
+def _optional_tenant_header(request: Request) -> uuid.UUID | None:
+    raw = request.headers.get("X-Tenant-ID")
+    if not raw:
+        return None
+    try:
+        return uuid.UUID(str(raw))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Invalid X-Tenant-ID") from exc
+
+
+def _key_policy(request: Request) -> KeyPolicy:
+    policy = getattr(request.app.state, "key_policy", None)
+    if policy is None:
+        policy = TenantOwnedKeyPolicy()
+        request.app.state.key_policy = policy
+    return policy
+
+
+def _note_index(cache: TicketCache, entries: list[Any]) -> None:
+    cache.note_key_index(
+        (entry.tenant_id, entry.fingerprint, getattr(entry, "kind", "renter"))
+        for entry in entries
+    )
+
+
+async def _tenant_from_api_key(request: Request, raw_key: str, *, ir: bool) -> uuid.UUID:
+    """Fingerprint to tenant. One-shot index pull when the cache has never seen it."""
+
+    fingerprint = renter_key_fingerprint(raw_key)
+    cache = _tickets(request)
+    found = cache.tenant_for_fingerprint(fingerprint, ir=ir)
+    if found is not None:
+        return found
+    plane = _control(request)
+    list_index = getattr(plane, "list_key_index", None)
+    entries: list[Any] = []
+    if list_index is not None:
+        try:
+            entries = list(await list_index())
+        except Exception:
+            logger.info("key index refresh skipped")
+            entries = []
+    _note_index(cache, entries)
+    hinted = cache.tenant_for_fingerprint(fingerprint, ir=ir)
+    if hinted is None:
+        raise DoorError(401, INVALID_API_KEY_MESSAGE, "invalid_api_key")
+    try:
+        await refresh_assignments(plane, cache, hinted)
+    except Exception:
+        logger.info("key tenant refresh skipped")
+    found = cache.tenant_for_fingerprint(fingerprint, ir=ir)
+    if found is None:
+        raise DoorError(401, INVALID_API_KEY_MESSAGE, "invalid_api_key")
+    return found
+
+
+async def _report_key_use(request: Request, key_id: uuid.UUID | None) -> None:
+    """At most one last_used write per key per minute. Failures do not fail chat."""
+
+    if key_id is None:
+        return
+    import time
+
+    now = time.monotonic()
+    recent = getattr(request.app.state, "key_touch_at", None)
+    if recent is None:
+        recent = {}
+        request.app.state.key_touch_at = recent
+    if now < recent.get(key_id, 0.0):
+        return
+    recent[key_id] = now + 60.0
+    hook = getattr(request.app.state, "key_toucher", None)
+    if hook is not None:
+        try:
+            await hook(key_id)
+        except Exception:
+            logger.info("key touch skipped")
+        return
+    from api.core.config import settings
+
+    token = settings.usable_api_keys_internal_token()
+    base = os.environ.get("HYPERMESH_API_KEYS_URL", "").strip()
+    if not token or not base:
+        return
+    try:
+        import httpx
+
+        async with httpx.AsyncClient(timeout=2.0) as client:
+            await client.post(
+                f"{base.rstrip('/')}/api/v1/internal/touch",
+                headers={"X-Internal-Token": token},
+                json={"key_id": str(key_id)},
+            )
+    except Exception:
+        logger.info("key touch skipped")
+
+
+async def _authorize_caller(
+    request: Request, *, ir: bool
+) -> tuple[RenterGrant, uuid.UUID, str | None]:
+    if ir:
+        grant = require_auditor_grant(request, bind_tenant_header=False)
+    else:
+        grant = require_renter_grant(request, bind_tenant_header=False)
+    raw_key = presented_renter_key(request) if grant.kind == "api_key" else None
+    if grant.kind == "api_key":
+        if not raw_key:
+            raise DoorError(401, INVALID_API_KEY_MESSAGE, "invalid_api_key")
+        tenant_id = await _tenant_from_api_key(request, raw_key, ir=ir)
+        header_tenant = _optional_tenant_header(request)
+        if header_tenant is not None and header_tenant != tenant_id:
+            raise DoorError(403, TENANT_MISMATCH_MESSAGE, "tenant_mismatch")
+        key_id = await confirm_api_key_live(
+            request,
+            tenant_id=tenant_id,
+            raw_key=raw_key,
+            fingerprint=renter_key_fingerprint(raw_key),
+            cache=_tickets(request),
+        )
+        await _report_key_use(request, key_id)
+        return grant, tenant_id, raw_key
+    tenant_id = jwt_tenant_id(grant)
+    if tenant_id is None:
+        raise DoorError(401, INVALID_API_KEY_MESSAGE, "invalid_api_key")
+    header_tenant = _optional_tenant_header(request)
+    if header_tenant is not None and header_tenant != tenant_id:
+        raise DoorError(403, TENANT_MISMATCH_MESSAGE, "tenant_mismatch")
+    return grant, tenant_id, None
+
+
+async def _open_door(
+    request: Request, body: ChatCompletionRequest, *, ir: bool
+) -> tuple[RenterGrant, uuid.UUID, uuid.UUID]:
+    grant, tenant_id, raw_key = await _authorize_caller(request, ir=ir)
+    purposes = IR_CHAT_PURPOSES if ir else RENTER_CHAT_PURPOSES
+    try:
+        lease = resolve_route(
+            _tickets(request),
+            key=raw_key,
+            tenant_id=tenant_id,
+            requested_model=body.model,
+            requested_lease_id=_optional_lease_id(request, body),
+            purposes=purposes,
+            policy=_key_policy(request),
+        )
+    except LeaseNotOwned as exc:
+        raise DoorError(403, LEASE_NOT_OWNED_MESSAGE, "lease_not_owned") from exc
+    if lease is None:
+        raise DoorError(402, NO_ACTIVE_LEASE_MESSAGE, "no_active_lease")
+    return grant, tenant_id, lease.lease_id
+
+
+def _models_body(request: Request, tenant_id: uuid.UUID, raw_key: str | None) -> dict[str, Any]:
+    candidates = _key_policy(request).candidate_leases(
+        _tickets(request),
+        tenant_id,
+        key=raw_key,
+        purposes=RENTER_CHAT_PURPOSES,
+    )
+    return {
+        "object": "list",
+        "data": [
+            {"id": catalog_id, "object": "model", "owned_by": "hypermesh"}
+            for catalog_id in catalog_ids(candidates)
+        ],
+    }
+
+
+async def _list_models(request: Request) -> dict[str, Any]:
+    """Catalog ids of the key's active leases. No lease is an empty 200 list."""
+
+    _grant, tenant_id, raw_key = await _authorize_caller(request, ir=False)
+    return _models_body(request, tenant_id, raw_key)
+
+
 @router.get("/ready")
 async def ready(request: Request) -> dict[str, str]:
     _require_service_cred(request)
@@ -390,9 +606,7 @@ async def post_metrics(request: Request, body: MetricsBody) -> dict[str, str]:
 
 
 async def _chat(request: Request, body: ChatCompletionRequest) -> StreamingResponse:
-    grant = require_renter_grant(request)
-    tenant_id = _tenant_id(request)
-    lease_id = _lease_id(request, body)
+    grant, tenant_id, lease_id = await _open_door(request, body, ir=False)
     cache = _tickets(request)
     cached = cache.get(tenant_id, lease_id)
     peer_key = cached.peer_public_key if cached else None
@@ -599,9 +813,7 @@ async def _hold_or_resume(
 async def _ir_chat(request: Request, body: ChatCompletionRequest):
     """Opt-in IR door. Classify, then org policy, then inbox."""
 
-    grant = require_auditor_grant(request)
-    tenant_id = _tenant_id(request)
-    lease_id = _lease_id(request, body)
+    grant, tenant_id, lease_id = await _open_door(request, body, ir=True)
     cache = _tickets(request)
     cached = cache.get(tenant_id, lease_id)
     peer_key = cached.peer_public_key if cached else None
@@ -713,6 +925,16 @@ async def _export_receipts(request: Request) -> dict[str, Any]:
     tenant_id = _tenant_id(request)
     await require_tenant_bound_grant(request, tenant_id)
     return {"receipts": _receipts(request).export_for(tenant_id)}
+
+
+@router.get("/v1/models")
+async def sibling_models(request: Request) -> dict[str, Any]:
+    return await _list_models(request)
+
+
+@openai_router.get("/v1/models")
+async def openai_models(request: Request) -> dict[str, Any]:
+    return await _list_models(request)
 
 
 @router.post("/v1/chat/completions")

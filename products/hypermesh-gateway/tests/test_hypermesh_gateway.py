@@ -268,8 +268,8 @@ async def test_renter_chat_without_paid_active_lease_fails(
         headers=_renter(tenant_headers),
         json={"lease_id": str(lease_id), "messages": [{"role": "user", "content": "secret prompt"}]},
     )
-    assert refused.status_code == 409
-    assert refused.json()["detail"] == INSTANCE_NOT_READY
+    assert refused.status_code == 403
+    assert refused.json()["detail"] == "lease_id is not owned by this API key"
     assert control_plane.get_lease_calls == 0
     assert control_plane.list_tunnels_calls == 0
     assert "path b" not in refused.text.lower()
@@ -966,8 +966,6 @@ class _AcceptJwt:
 async def test_chat_portal_jwt_local_verify_plus_ticket(
     http_client, tenant_headers, control_plane, app, tenant_id
 ):
-    from hypermesh_gateway_service.renter_auth import RENTER_AUTH_REQUIRED
-
     lease_id = uuid.uuid4()
     app.state.ticket_cache.put(tenant_id, _signed_ticket(lease_id))
     validator = _AcceptJwt("portal.jwt.token", tenant_id)
@@ -990,7 +988,7 @@ async def test_chat_portal_jwt_local_verify_plus_ticket(
         json={"lease_id": str(lease_id), "messages": [{"role": "user", "content": "hi"}]},
     )
     assert refused.status_code == 401
-    assert refused.json()["detail"] == RENTER_AUTH_REQUIRED
+    assert refused.json()["error"]["code"] == "invalid_api_key"
     assert control_plane.get_lease_calls == 0
 
 
@@ -1039,8 +1037,6 @@ async def test_chat_x_api_key_plus_paid_ticket(
 async def test_chat_rejects_host_and_gateway_secrets(
     http_client, tenant_headers, control_plane, app, tenant_id
 ):
-    from hypermesh_gateway_service.renter_auth import RENTER_AUTH_REQUIRED
-
     lease_id = uuid.uuid4()
     app.state.ticket_cache.put(tenant_id, _signed_ticket(lease_id))
     _mock_runtime(app)
@@ -1051,7 +1047,7 @@ async def test_chat_rejects_host_and_gateway_secrets(
             json={"lease_id": str(lease_id), "messages": [{"role": "user", "content": "hi"}]},
         )
         assert refused.status_code == 401
-        assert refused.json()["detail"] == RENTER_AUTH_REQUIRED
+        assert refused.json()["error"]["code"] == "invalid_api_key"
     assert control_plane.get_lease_calls == 0
 
 
@@ -1066,7 +1062,8 @@ async def test_jwt_without_paid_ticket_is_instance_not_ready(
         headers={**tenant_headers, "Authorization": "Bearer portal.jwt.token"},
         json={"lease_id": str(uuid.uuid4()), "messages": [{"role": "user", "content": "hi"}]},
     )
-    assert refused.status_code == 409
+    assert refused.status_code == 403
+    assert refused.json()["error"]["code"] == "lease_not_owned"
     assert refused.json()["detail"] == INSTANCE_NOT_READY
     assert validator.calls == 1
     assert control_plane.get_lease_calls == 0

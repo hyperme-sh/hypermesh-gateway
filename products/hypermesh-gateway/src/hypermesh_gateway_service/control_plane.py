@@ -16,7 +16,20 @@ import httpx
 
 from hypermesh_gateway_service.tickets import CachedTicket, TicketPull
 
+
+@dataclass(frozen=True)
+class KeyIndexEntry:
+    fingerprint: str
+    tenant_id: uuid.UUID
+    kind: str = "renter"
+
 INSTANCE_NOT_READY = "instance not ready"
+
+
+def _parse_dt(raw: object) -> datetime | None:
+    if not raw:
+        return None
+    return datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
 
 
 @dataclass(frozen=True)
@@ -44,6 +57,8 @@ class ControlPlane(Protocol):
     async def list_tunnels(self, tenant_id: uuid.UUID) -> list[GatewayTunnel]: ...
 
     async def list_tickets(self, tenant_id: uuid.UUID) -> TicketPull: ...
+
+    async def list_key_index(self) -> list[KeyIndexEntry]: ...
 
     async def post_metrics(
         self,
@@ -111,8 +126,7 @@ class HttpControlPlane:
             body = {}
         tickets: list[CachedTicket] = []
         for row in body.get("tickets", []):
-            exp_raw = row.get("exp")
-            exp = datetime.fromisoformat(str(exp_raw).replace("Z", "+00:00")) if exp_raw else None
+            exp = _parse_dt(row.get("exp"))
             device_raw = row.get("device_id")
             tickets.append(
                 CachedTicket(
@@ -131,6 +145,7 @@ class HttpControlPlane:
                         else None
                     ),
                     catalog_admitted=bool(row.get("catalog_admitted")),
+                    activated_at=_parse_dt(row.get("activated_at")),
                 )
             )
         revoked = [uuid.UUID(str(item)) for item in body.get("revoked_lease_ids", [])]
@@ -144,12 +159,58 @@ class HttpControlPlane:
             for item in body.get("ir_key_fingerprints") or []
             if str(item).strip()
         ]
+        revoked_keys = [
+            str(item).strip().lower()
+            for item in body.get("revoked_key_fingerprints") or []
+            if str(item).strip()
+        ]
         return TicketPull(
             tickets=tickets,
             revoked_lease_ids=revoked,
             key_fingerprints=fingerprints,
             ir_key_fingerprints=ir_fingerprints,
+            revoked_key_fingerprints=revoked_keys,
         )
+
+    async def list_key_index(self) -> list[KeyIndexEntry]:
+        """Cross-tenant fingerprint index. Empty when the internal token is unset."""
+
+        from api.core.config import settings
+
+        token = (settings.hypermesh_internal_token or "").strip()
+        if not token:
+            return []
+        try:
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                response = await client.get(
+                    f"{self._base}/api/v1/hypermesh/internal/renter-key-index",
+                    headers={"X-Internal-Token": token},
+                )
+        except httpx.HTTPError:
+            return []
+        if response.status_code >= 400:
+            return []
+        body = response.json()
+        rows = body.get("keys") if isinstance(body, dict) else None
+        if not isinstance(rows, list):
+            return []
+        out: list[KeyIndexEntry] = []
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            fingerprint = str(row.get("fingerprint") or "").strip().lower()
+            tenant_raw = row.get("tenant_id")
+            if not fingerprint or not tenant_raw:
+                continue
+            try:
+                tenant_id = uuid.UUID(str(tenant_raw))
+            except ValueError:
+                continue
+            kind = "ir" if str(row.get("kind") or "") == "ir" else "renter"
+            out.append(
+                KeyIndexEntry(fingerprint=fingerprint, tenant_id=tenant_id, kind=kind)
+            )
+        return out
 
     async def post_metrics(
         self,
@@ -199,8 +260,10 @@ class FakeControlPlane:
         self.get_lease_calls = 0
         self.list_tunnels_calls = 0
         self.list_tickets_calls = 0
+        self.list_key_index_calls = 0
         self.post_metrics_calls = 0
         self.fail_metrics = False
+        self.key_index: list[KeyIndexEntry] = []
 
     async def get_lease(self, tenant_id: uuid.UUID, lease_id: uuid.UUID) -> LeaseView | None:
         self.get_lease_calls += 1
@@ -221,7 +284,12 @@ class FakeControlPlane:
             revoked_lease_ids=list(self.ticket_pull.revoked_lease_ids),
             key_fingerprints=list(self.ticket_pull.key_fingerprints),
             ir_key_fingerprints=list(self.ticket_pull.ir_key_fingerprints),
+            revoked_key_fingerprints=list(self.ticket_pull.revoked_key_fingerprints),
         )
+
+    async def list_key_index(self) -> list[KeyIndexEntry]:
+        self.list_key_index_calls += 1
+        return list(self.key_index)
 
     async def post_metrics(
         self,
