@@ -401,12 +401,26 @@ def _note_index(cache: TicketCache, entries: list[Any]) -> None:
     )
 
 
+def _cached_key_tenant(cache: TicketCache, fingerprint: str, *, ir: bool) -> uuid.UUID | None:
+    """Tenant that published this fingerprint.
+
+    The IR door still recognizes a renter fingerprint so a renter-purpose
+    ticket fails posture (409) before the IR fingerprint bind (401). An IR
+    key that is only in the IR index resolves on the first lookup.
+    """
+
+    found = cache.tenant_for_fingerprint(fingerprint, ir=ir)
+    if found is not None or not ir:
+        return found
+    return cache.tenant_for_fingerprint(fingerprint, ir=False)
+
+
 async def _tenant_from_api_key(request: Request, raw_key: str, *, ir: bool) -> uuid.UUID:
     """Fingerprint to tenant. One-shot index pull when the cache has never seen it."""
 
     fingerprint = renter_key_fingerprint(raw_key)
     cache = _tickets(request)
-    found = cache.tenant_for_fingerprint(fingerprint, ir=ir)
+    found = _cached_key_tenant(cache, fingerprint, ir=ir)
     if found is not None:
         return found
     plane = _control(request)
@@ -419,14 +433,14 @@ async def _tenant_from_api_key(request: Request, raw_key: str, *, ir: bool) -> u
             logger.info("key index refresh skipped")
             entries = []
     _note_index(cache, entries)
-    hinted = cache.tenant_for_fingerprint(fingerprint, ir=ir)
+    hinted = _cached_key_tenant(cache, fingerprint, ir=ir)
     if hinted is None:
         raise DoorError(401, INVALID_API_KEY_MESSAGE, "invalid_api_key")
     try:
         await refresh_assignments(plane, cache, hinted)
     except Exception:
         logger.info("key tenant refresh skipped")
-    found = cache.tenant_for_fingerprint(fingerprint, ir=ir)
+    found = _cached_key_tenant(cache, fingerprint, ir=ir)
     if found is None:
         raise DoorError(401, INVALID_API_KEY_MESSAGE, "invalid_api_key")
     return found
@@ -511,17 +525,25 @@ async def _open_door(
 ) -> tuple[RenterGrant, uuid.UUID, uuid.UUID]:
     grant, tenant_id, raw_key = await _authorize_caller(request, ir=ir)
     purposes = IR_CHAT_PURPOSES if ir else RENTER_CHAT_PURPOSES
+    requested_lease_id = _optional_lease_id(request, body)
     try:
         lease = resolve_route(
             _tickets(request),
             key=raw_key,
             tenant_id=tenant_id,
             requested_model=body.model,
-            requested_lease_id=_optional_lease_id(request, body),
+            requested_lease_id=requested_lease_id,
             purposes=purposes,
             policy=_key_policy(request),
         )
     except LeaseNotOwned as exc:
+        # A lease this tenant already revoked is not ready (409 via posture).
+        # A lease the cache has never held is not owned by the key.
+        if (
+            requested_lease_id is not None
+            and requested_lease_id in _tickets(request).revoked_lease_ids(tenant_id)
+        ):
+            return grant, tenant_id, requested_lease_id
         raise DoorError(403, LEASE_NOT_OWNED_MESSAGE, "lease_not_owned") from exc
     if lease is None:
         raise DoorError(402, NO_ACTIVE_LEASE_MESSAGE, "no_active_lease")

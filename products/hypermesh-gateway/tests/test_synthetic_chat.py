@@ -166,7 +166,11 @@ async def test_synthetic_gateway_chat_not_ready_without_ticket(
     http_client, tenant_headers, control_plane
 ):
     lease_id = uuid.uuid4()
-    control_plane.ticket_pull = TicketPull(tickets=[], revoked_lease_ids=[])
+    control_plane.ticket_pull = TicketPull(
+        tickets=[],
+        revoked_lease_ids=[],
+        key_fingerprints=TEST_RENTER_FINGERPRINTS,
+    )
     await http_client.post(
         "/api/v1/hypermesh-gateway/tunnels/apply",
         headers=_gateway(tenant_headers),

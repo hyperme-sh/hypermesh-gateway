@@ -57,8 +57,8 @@ OpenAI error shape is only on `/v1/*`. Sibling `/api/v1/hypermesh-gateway/...` k
 | 401 | `invalid_api_key` | Missing, unknown, or revoked key |
 | 402 | `no_active_lease` | Key is valid and no honoring lease is selected |
 | 403 | `tenant_mismatch` | `X-Tenant-ID` does not match the key |
-| 403 | `lease_not_owned` | `lease_id` is not in that tenant's cache |
-| 409 | (detail) instance not ready | Ticket will not honor, or the host is down |
+| 403 | `lease_not_owned` | `lease_id` is not in that tenant's cache and is not one of its revoked leases |
+| 409 | (detail) instance not ready | Ticket will not honor, including a lease id this tenant has revoked, or the host is down |
 | 429 | (detail) | Quota or the usage queue is full |
 
 Revoke removes the fingerprint (`POST /api/v1/hypermesh/internal/renter-key-fingerprints/revoke`, and the IR twin). The door also re-checks api-keys-service `POST /api/v1/internal/validate` when `API_KEYS_INTERNAL_TOKEN` is set, and remembers a positive result for at most 60s. A pull that drops the fingerprint purges that memory. A revoked key is not served for more than 60s.

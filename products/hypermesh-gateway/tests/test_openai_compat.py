@@ -461,19 +461,48 @@ async def test_sse_chunks_arrive_incrementally(http_client, app, tenant_id, monk
                 peer_public_key="peer-pub",
             ),
         )
+        # httpx.ASGITransport joins the body before the client iterates it.
+        # Drive the app as ASGI 2.4 so each StreamingResponse yield is visible.
+        body = json.dumps({"messages": [{"role": "user", "content": "hi"}]}).encode()
         started: list[float] = []
-        async with http_client.stream(
-            "POST",
-            "/v1/chat/completions",
-            headers={"Authorization": f"Bearer {TEST_RENTER_KEY}"},
-            json={"messages": [{"role": "user", "content": "hi"}]},
-        ) as response:
-            assert response.status_code == 200
-            assert "text/event-stream" in response.headers["content-type"]
-            assert response.headers["x-accel-buffering"] == "no"
-            async for chunk in response.aiter_bytes():
-                if chunk:
-                    started.append(time.monotonic())
+        status_code = 0
+        response_headers: dict[str, str] = {}
+
+        async def receive():
+            return {"type": "http.request", "body": body, "more_body": False}
+
+        async def send(message):
+            nonlocal status_code
+            if message["type"] == "http.response.start":
+                status_code = int(message["status"])
+                for key, value in message.get("headers") or []:
+                    response_headers[key.decode().lower()] = value.decode()
+            elif message["type"] == "http.response.body" and message.get("body"):
+                started.append(time.monotonic())
+
+        await app(
+            {
+                "type": "http",
+                "asgi": {"version": "3.0", "spec_version": "2.4"},
+                "http_version": "1.1",
+                "method": "POST",
+                "scheme": "http",
+                "path": "/v1/chat/completions",
+                "raw_path": b"/v1/chat/completions",
+                "query_string": b"",
+                "headers": [
+                    (b"authorization", f"Bearer {TEST_RENTER_KEY}".encode()),
+                    (b"content-type", b"application/json"),
+                ],
+                "client": ("127.0.0.1", 50000),
+                "server": ("test", 80),
+            },
+            receive,
+            send,
+        )
+        assert status_code == 200
+        assert "text/event-stream" in response_headers["content-type"]
+        assert response_headers["x-accel-buffering"] == "no"
         assert len(started) >= 2
         assert started[-1] - started[0] >= 0.2
     finally:
