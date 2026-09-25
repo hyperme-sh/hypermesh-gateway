@@ -32,6 +32,10 @@ Compose host port **8011**. Sibling prefix `/api/v1/hypermesh-gateway`. Customer
 
 Customer-readable chat error when the instance is not up: **instance not ready**.
 
+`GET /api/v1/hypermesh-gateway/ready` takes the gateway service credential and reports process health only. It does not contact leased hosts. One host being down does not change it. The control-plane edge catalog probe (`GET /api/v1/hypermesh/catalog` from edge health) is a different check and stays as it is.
+
+`GET /api/v1/hypermesh-gateway/leases/{lease_id}/completions-signal` reports that one lease. It GETs the host completions path on port 8080 and does not send a chat completion. The same lease is not probed again until `HYPERMESH_COMPLETIONS_SIGNAL_INTERVAL_S` (default 30 seconds). `completions` is `up` or `down` on that lease. The result does not change `/ready` and does not take the gateway out of service.
+
 ## OpenAI-compatible door
 
 `https://chat.test.hyperme.sh/v1` takes a base URL and `Authorization: Bearer <renter API key>`. Cursor, VS Code Copilot BYOK, Continue, and Cline do not send `X-Tenant-ID` or a lease id.

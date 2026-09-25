@@ -18,6 +18,11 @@ from hypermesh_gateway_service.chat import (
     iter_chat_bytes,
     proxy_chat,
 )
+from hypermesh_gateway_service.completions_signal import (
+    completions_route_reachable,
+    signal_cache,
+    signal_interval_s,
+)
 from hypermesh_gateway_service.errors import (
     INVALID_API_KEY_MESSAGE,
     LEASE_NOT_OWNED_MESSAGE,
@@ -583,8 +588,47 @@ async def _list_models(request: Request) -> dict[str, Any]:
 
 @router.get("/ready")
 async def ready(request: Request) -> dict[str, str]:
+    """Process health. Does not probe hosts and does not depend on a lease."""
+
     _require_service_cred(request)
     return {"status": "ready"}
+
+
+@router.get(
+    "/leases/{lease_id}/completions-signal",
+    summary="Per-lease completions route signal",
+    description=(
+        "Reports whether this lease's host port 8080 completions path is "
+        "reachable. Rate-limited per lease. A down host is a field on this "
+        "lease only. It does not change /ready and does not stop the gateway."
+    ),
+)
+async def lease_completions_signal(request: Request, lease_id: uuid.UUID) -> dict[str, str | bool]:
+    _require_service_cred(request)
+    tenant_id = _tenant_id(request)
+    cache = _tickets(request)
+    ticket = cache.get(tenant_id, lease_id)
+    if ticket is None:
+        raise HTTPException(status_code=404, detail="Lease ticket not cached")
+    signals = signal_cache(request.app.state)
+    cached = signals.fresh(tenant_id, lease_id, interval_s=signal_interval_s())
+    if cached is not None:
+        return {"lease_id": str(lease_id), "completions": cached, "cached": True}
+    try:
+        claims = require_chat_posture(
+            cache,
+            tenant_id,
+            lease_id,
+            peer_up=_peer_is_up(request, ticket.peer_public_key),
+        )
+    except TicketNotReady:
+        signals.store(tenant_id, lease_id, "down")
+        return {"lease_id": str(lease_id), "completions": "down", "cached": False}
+    runtime = getattr(request.app.state, "runtime_client", None)
+    up = await completions_route_reachable(claims.client_address, runtime_client=runtime)
+    state = "up" if up else "down"
+    signals.store(tenant_id, lease_id, state)
+    return {"lease_id": str(lease_id), "completions": state, "cached": False}
 
 
 @router.get("/tunnels")
