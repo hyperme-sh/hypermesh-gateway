@@ -17,6 +17,9 @@ def _clear_ir_taxonomy_override(monkeypatch):
     monkeypatch.delenv("AIUDITOR_SERVICE_URL", raising=False)
     monkeypatch.delenv("AIUDITOR_INTERNAL_TOKEN", raising=False)
     monkeypatch.setenv("HYPERMESH_IR_RECEIPT_PATH", "memory")
+    monkeypatch.setenv("HYPERMESH_PORTAL_ORIGIN", "https://portal.test.hyperme.sh")
+    monkeypatch.setenv("FASTAPI_ENV", "development")
+    monkeypatch.delenv("HYPERMESH_REQUIRE_KEY_VALIDATE", raising=False)
     monkeypatch.setattr(
         api_config.settings,
         "api_key_exchange_jwt_secret",

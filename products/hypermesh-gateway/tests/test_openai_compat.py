@@ -16,8 +16,9 @@ from hypermesh_gateway_service.chat import (
     fill_tool_call_ids,
     proxy_chat,
 )
-from hypermesh_gateway_service.errors import NO_ACTIVE_LEASE_MESSAGE
+from hypermesh_gateway_service.errors import no_active_lease_message
 from hypermesh_gateway_service.route_resolve import (
+    ModelNotFound,
     TenantOwnedKeyPolicy,
     resolve_route,
     select_lease,
@@ -115,10 +116,18 @@ def test_select_lease_rules():
         catalog_id="other-model",
         activated_at=newer,
     )
-    assert select_lease([first], "ignored") is first
+    assert select_lease([first], None) is first
+    assert select_lease([first], "") is first
+    with pytest.raises(ModelNotFound) as missed:
+        select_lease([first], "ignored")
+    assert missed.value.available == ["llama-3.1-8b-q4"]
     assert select_lease([first, second], "other-model") is second
     assert select_lease([first, second], "llama-3.1-8b-q4") is first
     assert select_lease([first, second], None) is second
+    assert select_lease([first, second], "  ") is second
+    with pytest.raises(ModelNotFound) as unknown:
+        select_lease([first, second], "not-a-model")
+    assert unknown.value.available == ["other-model", "llama-3.1-8b-q4"]
     same = CachedTicket(
         lease_id=uuid.uuid4(),
         ticket="t",
@@ -249,7 +258,7 @@ async def test_no_active_lease_is_402_and_models_are_an_empty_list(http_client, 
     assert missing.status_code == 402
     assert missing.json() == {
         "error": {
-            "message": NO_ACTIVE_LEASE_MESSAGE,
+            "message": no_active_lease_message(),
             "type": "invalid_request_error",
             "code": "no_active_lease",
         }
@@ -507,3 +516,151 @@ async def test_sse_chunks_arrive_incrementally(http_client, app, tenant_id, monk
         assert started[-1] - started[0] >= 0.2
     finally:
         host.stop()
+
+
+def test_no_active_lease_message_reads_portal_origin(monkeypatch):
+    monkeypatch.setenv("HYPERMESH_PORTAL_ORIGIN", "https://portal.example")
+    text = no_active_lease_message()
+    assert text.endswith(
+        "https://portal.example/dashboard/hypermesh/renter/catalog"
+    )
+    assert "portal.test" not in text
+    monkeypatch.setenv("HYPERMESH_PORTAL_ORIGIN", "")
+    bare = no_active_lease_message()
+    assert bare.endswith("Start a lease at /dashboard/hypermesh/renter/catalog")
+    assert "portal.test" not in bare
+
+
+@pytest.mark.asyncio
+async def test_unknown_model_is_404_and_lists_available_ids(http_client, app, tenant_id):
+    app.state.ticket_cache.put(
+        tenant_id,
+        _ticket(
+            uuid.uuid4(),
+            catalog_id="llama-3.1-8b-q4",
+            activated_at=datetime.now(UTC),
+            tenant_id=tenant_id,
+        ),
+    )
+    refused = await http_client.post(
+        "/v1/chat/completions",
+        headers={"Authorization": f"Bearer {TEST_RENTER_KEY}"},
+        json={"model": "other-model", "messages": [{"role": "user", "content": "hi"}]},
+    )
+    assert refused.status_code == 404
+    error = refused.json()["error"]
+    assert error["code"] == "model_not_found"
+    assert error["type"] == "invalid_request_error"
+    assert "llama-3.1-8b-q4" in error["message"]
+    assert "other-model" in error["message"]
+
+
+@pytest.mark.asyncio
+async def test_prod_requires_remote_key_validate(http_client, app, tenant_id, monkeypatch):
+    monkeypatch.setenv("FASTAPI_ENV", "production")
+    app.state.ticket_cache.put(
+        tenant_id,
+        _ticket(
+            uuid.uuid4(),
+            catalog_id="llama-3.1-8b-q4",
+            activated_at=datetime.now(UTC),
+            tenant_id=tenant_id,
+        ),
+    )
+    _mock_runtime(app)
+    refused = await http_client.post(
+        "/v1/chat/completions",
+        headers={"Authorization": f"Bearer {TEST_RENTER_KEY}"},
+        json={"messages": [{"role": "user", "content": "hi"}]},
+    )
+    assert refused.status_code == 401
+    assert refused.json()["error"]["code"] == "invalid_api_key"
+
+
+@pytest.mark.asyncio
+async def test_revoke_then_next_gateway_request_is_401(
+    http_client, app, tenant_id, monkeypatch
+):
+    """Unpublish on the plane, pull, then the next chat with that key is 401."""
+
+    import sys
+    from pathlib import Path
+
+    from asgi_lifespan import LifespanManager
+
+    from api.core.config import settings
+
+    keys_src = Path(__file__).resolve().parents[3] / "core" / "api-keys-service" / "src"
+    sys.path.insert(0, str(keys_src))
+    from api_keys_service.fingerprint import revoke_renter_key_fingerprint
+    from hypermesh_gateway_service.control_plane import HttpControlPlane
+    from hypermesh_gateway_service.routes import refresh_assignments
+    from hypermesh_service.app import create_app as create_hypermesh
+
+    monkeypatch.setattr(settings, "hypermesh_internal_token", "test-hypermesh-internal-token")
+    plane = create_hypermesh(enable_db_middleware=False)
+    fingerprint = renter_key_fingerprint(TEST_RENTER_KEY)
+    headers = {
+        "X-Internal-Token": "test-hypermesh-internal-token",
+        "X-Tenant-ID": str(tenant_id),
+    }
+    async with LifespanManager(plane):
+        transport = httpx.ASGITransport(app=plane)
+
+        class _PlaneClient(httpx.AsyncClient):
+            def __init__(self, timeout=None, **kwargs):
+                super().__init__(
+                    transport=transport,
+                    base_url="http://hypermesh",
+                    timeout=timeout,
+                )
+
+        async with _PlaneClient() as client:
+            registered = await client.post(
+                "/api/v1/hypermesh/internal/renter-key-fingerprints",
+                headers=headers,
+                json={"fingerprint": fingerprint},
+            )
+            assert registered.status_code == 201, registered.text
+            minted = await client.post(
+                "/api/v1/hypermesh/internal/gateways",
+                headers=headers,
+                params={"name": "fyber-test-gateway-door"},
+            )
+            assert minted.status_code == 201, minted.text
+            secret = minted.json()["service_secret"]
+
+        app.state.ticket_cache.put(
+            tenant_id,
+            _ticket(
+                uuid.uuid4(),
+                catalog_id="llama-3.1-8b-q4",
+                activated_at=datetime.now(UTC),
+                tenant_id=tenant_id,
+            ),
+        )
+        _mock_runtime(app)
+        chat_headers = {"Authorization": f"Bearer {TEST_RENTER_KEY}"}
+        body = {"messages": [{"role": "user", "content": "hi"}]}
+        first = await http_client.post("/v1/chat/completions", headers=chat_headers, json=body)
+        assert first.status_code == 200, first.text
+
+        monkeypatch.setattr(
+            "api_keys_service.fingerprint.httpx.AsyncClient", _PlaneClient
+        )
+        monkeypatch.setenv("HYPERMESH_CONTROL_PLANE_URL", "http://hypermesh")
+        await revoke_renter_key_fingerprint(tenant_id, fingerprint)
+
+        import hypermesh_gateway_service.control_plane as cp
+
+        monkeypatch.setattr(cp.httpx, "AsyncClient", _PlaneClient)
+        await refresh_assignments(
+            HttpControlPlane("http://hypermesh", secret),
+            app.state.ticket_cache,
+            tenant_id,
+        )
+        refused = await http_client.post(
+            "/v1/chat/completions", headers=chat_headers, json=body
+        )
+        assert refused.status_code == 401
+        assert refused.json()["error"]["code"] == "invalid_api_key"

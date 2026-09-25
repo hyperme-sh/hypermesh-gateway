@@ -21,9 +21,10 @@ from hypermesh_gateway_service.chat import (
 from hypermesh_gateway_service.errors import (
     INVALID_API_KEY_MESSAGE,
     LEASE_NOT_OWNED_MESSAGE,
-    NO_ACTIVE_LEASE_MESSAGE,
     TENANT_MISMATCH_MESSAGE,
     DoorError,
+    model_not_found_message,
+    no_active_lease_message,
 )
 from hypermesh_gateway_service.control_plane import ControlPlane, GatewayTunnel
 from hypermesh_gateway_service.inbox import (
@@ -58,6 +59,7 @@ from hypermesh_gateway_service.renter_auth import (
 from hypermesh_gateway_service.route_resolve import (
     KeyPolicy,
     LeaseNotOwned,
+    ModelNotFound,
     TenantOwnedKeyPolicy,
     catalog_ids,
     resolve_route,
@@ -545,8 +547,14 @@ async def _open_door(
         ):
             return grant, tenant_id, requested_lease_id
         raise DoorError(403, LEASE_NOT_OWNED_MESSAGE, "lease_not_owned") from exc
+    except ModelNotFound as exc:
+        raise DoorError(
+            404,
+            model_not_found_message(exc.requested, exc.available),
+            "model_not_found",
+        ) from exc
     if lease is None:
-        raise DoorError(402, NO_ACTIVE_LEASE_MESSAGE, "no_active_lease")
+        raise DoorError(402, no_active_lease_message(), "no_active_lease")
     return grant, tenant_id, lease.lease_id
 
 

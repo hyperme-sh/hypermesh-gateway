@@ -25,6 +25,15 @@ class LeaseNotOwned(Exception):
     """The caller named a lease this tenant's cache does not hold."""
 
 
+class ModelNotFound(Exception):
+    """``model`` is set and no honoring lease serves that catalog id."""
+
+    def __init__(self, requested: str, available: list[str]) -> None:
+        super().__init__(requested)
+        self.requested = requested
+        self.available = available
+
+
 class KeyPolicy(Protocol):
     def candidate_leases(
         self,
@@ -70,8 +79,9 @@ def resolve_route(
     """Pick the lease for this key.
 
     An explicit lease id must already be in the tenant cache (else
-    ``LeaseNotOwned``). When the id is omitted, return the sole honoring
-    lease, or the catalog match, or the most recently activated. ``None``
+    ``LeaseNotOwned``). When ``model`` is omitted, return the sole honoring
+    lease or the most recently activated. When ``model`` is set, return only
+    a lease whose catalog id matches (else ``ModelNotFound``). ``None``
     means there is no active paid lease.
     """
 
@@ -90,18 +100,21 @@ def resolve_route(
 def select_lease(
     candidates: list[CachedTicket], requested_model: str | None
 ) -> CachedTicket | None:
+    """Pick a lease. A set ``model`` never falls through to a different catalog."""
+
     if not candidates:
         return None
-    if len(candidates) == 1:
-        return candidates[0]
     model = (requested_model or "").strip()
-    if model:
-        matched = [ticket for ticket in candidates if (ticket.catalog_id or "") == model]
-        if len(matched) == 1:
-            return matched[0]
-        if len(matched) > 1:
-            return _most_recent(matched)
-    return _most_recent(candidates)
+    if not model:
+        if len(candidates) == 1:
+            return candidates[0]
+        return _most_recent(candidates)
+    matched = [ticket for ticket in candidates if (ticket.catalog_id or "") == model]
+    if not matched:
+        raise ModelNotFound(model, catalog_ids(candidates))
+    if len(matched) == 1:
+        return matched[0]
+    return _most_recent(matched)
 
 
 def catalog_ids(candidates: list[CachedTicket]) -> list[str]:

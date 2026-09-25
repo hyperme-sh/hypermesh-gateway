@@ -267,10 +267,38 @@ def _uuid_claim(claims: dict[str, Any] | None) -> uuid.UUID | None:
         return None
 
 
+_LOCAL_ENVS = frozenset({"development", "dev", "local"})
+
+
+def remote_key_validate_required() -> bool:
+    """Remote api-keys validate is required on test and prod.
+
+    ``HYPERMESH_REQUIRE_KEY_VALIDATE=1`` forces it on and ``=0`` forces it
+    off. Unset, it is on unless this process is local/dev
+    (``FASTAPI_ENV=development`` or ``HYPERMESH_DEV=1``).
+    """
+
+    flag = os.environ.get("HYPERMESH_REQUIRE_KEY_VALIDATE", "").strip().lower()
+    if flag in {"1", "true", "yes", "on"}:
+        return True
+    if flag in {"0", "false", "no", "off"}:
+        return False
+    if os.environ.get("HYPERMESH_DEV", "").strip().lower() in {"1", "true", "yes", "on"}:
+        return False
+    raw = os.environ.get("FASTAPI_ENV")
+    if raw is None or not raw.strip():
+        from api.core.config import settings
+
+        raw = settings.fastapi_env
+    return (raw or "development").strip().lower() not in _LOCAL_ENVS
+
+
 def remote_key_validate_enabled(request: Request) -> bool:
-    """True when a validator is injected or the internal token is configured."""
+    """True when validate must run, a validator is injected, or a token is set."""
 
     if getattr(request.app.state, "api_key_validator", None) is not None:
+        return True
+    if remote_key_validate_required():
         return True
     from api.core.config import settings
 
@@ -287,10 +315,11 @@ async def confirm_api_key_live(
 ) -> uuid.UUID | None:
     """Re-check a key against api-keys-service at most once per TTL.
 
-    Unconfigured validate trusts the fingerprint pull. A configured check
-    that fails, or a revoked key, is unauthorized. A fresh positive result
-    is not asked again until ``cache.key_ttl_s`` (default 60s). Returns the
-    key id when the validator reported one.
+    Local/dev with no token trusts the fingerprint pull. Test and prod
+    require api-keys-service. A check that fails, or a revoked key, is
+    unauthorized. A fresh positive result is not asked again until
+    ``cache.key_ttl_s`` (default 60s), so a revoked key stops working
+    within 60 seconds. Returns the key id when the validator reported one.
     """
 
     if not remote_key_validate_enabled(request):

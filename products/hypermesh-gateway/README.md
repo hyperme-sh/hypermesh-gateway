@@ -42,9 +42,15 @@ Keys are tenant-owned, never lease-owned. There is no `scheduled` lease status. 
 
 Lease choice when the request omits `lease_id` (`resolve_route(key, requested_model)` in `route_resolve.py`):
 
+When `model` is absent or empty:
+
 1. Honoring tickets for the tenant (signed, active, not revoked). Exactly one: use it.
-2. Several: the ticket whose `catalog_id` equals the request `model`.
-3. Still ambiguous (no model, the model matches none, or it matches several): the most recently started (`activated_at` on the ticket row).
+2. Several: the most recently started (`activated_at` on the ticket row).
+
+When `model` is set:
+
+1. Honoring tickets whose `catalog_id` equals `model`. One match: use it. Several matches: the most recently started among them.
+2. No match: `404` `model_not_found`. The message lists the available catalog ids. The door does not serve a different model.
 
 `TenantOwnedKeyPolicy` is the seam. It ignores the key and returns every honoring ticket. A later routing layer can replace that policy so one key spans a subset of leases, and can add a routing model id such as `auto` on `GET /v1/models`. `auto` is not implemented and is not listed.
 
@@ -55,13 +61,14 @@ OpenAI error shape is only on `/v1/*`. Sibling `/api/v1/hypermesh-gateway/...` k
 | Status | code | When |
 |--------|------|------|
 | 401 | `invalid_api_key` | Missing, unknown, or revoked key |
-| 402 | `no_active_lease` | Key is valid and no honoring lease is selected |
+| 402 | `no_active_lease` | Key is valid and no honoring lease is selected. The catalog link uses `HYPERMESH_PORTAL_ORIGIN`. |
 | 403 | `tenant_mismatch` | `X-Tenant-ID` does not match the key |
 | 403 | `lease_not_owned` | `lease_id` is not in that tenant's cache and is not one of its revoked leases |
+| 404 | `model_not_found` | `model` is set and no honoring lease has that catalog id |
 | 409 | (detail) instance not ready | Ticket will not honor, including a lease id this tenant has revoked, or the host is down |
 | 429 | (detail) | Quota or the usage queue is full |
 
-Revoke removes the fingerprint (`POST /api/v1/hypermesh/internal/renter-key-fingerprints/revoke`, and the IR twin). The door also re-checks api-keys-service `POST /api/v1/internal/validate` when `API_KEYS_INTERNAL_TOKEN` is set, and remembers a positive result for at most 60s. A pull that drops the fingerprint purges that memory. A revoked key is not served for more than 60s.
+`DELETE /api/v1/api-keys/{id}` unpublishes the fingerprint before it marks the key revoked (`POST /api/v1/hypermesh/internal/renter-key-fingerprints/revoke`, and the IR twin). If that unpublish fails, the delete returns 502 and the key stays active. On test and prod the door requires api-keys-service `POST /api/v1/internal/validate` (`HYPERMESH_REQUIRE_KEY_VALIDATE`, default on outside local/dev). A positive result is remembered for at most 60s, and a pull that lists the fingerprint in `revoked_key_fingerprints` drops it. A revoked key stops working within 60 seconds.
 
 Chat upstream timeout is `httpx.Timeout(connect=10, read=HYPERMESH_CHAT_READ_TIMEOUT_S or 1800, write=60, pool=10)`. The 1800s default matches the host `LLAMA_ARG_TIMEOUT=1800` and the HAProxy timeouts in FyberLabs/infra#130. `none` disables the read limit. SSE is passed through unbuffered (`x-accel-buffering: no`). Empty `tool_calls[].id` values are filled with `call_<hex>`, stable per index for one stream.
 
