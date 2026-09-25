@@ -63,9 +63,9 @@ OpenAI error shape is only on `/v1/*`. Sibling `/api/v1/hypermesh-gateway/...` k
 
 Revoke removes the fingerprint (`POST /api/v1/hypermesh/internal/renter-key-fingerprints/revoke`, and the IR twin). The door also re-checks api-keys-service `POST /api/v1/internal/validate` when `API_KEYS_INTERNAL_TOKEN` is set, and remembers a positive result for at most 60s. A pull that drops the fingerprint purges that memory. A revoked key is not served for more than 60s.
 
-Chat upstream timeout is `httpx.Timeout(connect=10, read=HYPERMESH_CHAT_READ_TIMEOUT_S or 600, write=60, pool=10)`. `none` disables the read limit. SSE is passed through unbuffered (`x-accel-buffering: no`). Empty `tool_calls[].id` values are filled with `call_<hex>`, stable per index for one stream.
+Chat upstream timeout is `httpx.Timeout(connect=10, read=HYPERMESH_CHAT_READ_TIMEOUT_S or 1800, write=60, pool=10)`. The 1800s default matches the host `LLAMA_ARG_TIMEOUT=1800` and the HAProxy timeouts in FyberLabs/infra#130. `none` disables the read limit. SSE is passed through unbuffered (`x-accel-buffering: no`). Empty `tool_calls[].id` values are filled with `call_<hex>`, stable per index for one stream.
 
-The edge `timeout client` / `timeout server` in front of this process is owned by FyberLabs/infra (HAProxy). This repo does not change it. Host llama-server `--jinja` is owned by the host entrypoint, not this door.
+The edge `timeout client` / `timeout server` in front of this process is owned by FyberLabs/infra (HAProxy, infra#130). This repo does not change it. Host llama-server `--jinja` is owned by the host entrypoint, not this door.
 
 `POST /api/v1/internal/touch` on api-keys-service records `last_used_at`, at most once per key per 60s.
 

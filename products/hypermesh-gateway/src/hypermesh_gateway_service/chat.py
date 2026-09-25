@@ -34,12 +34,13 @@ CHAT_READ_TIMEOUT_ENV = "HYPERMESH_CHAT_READ_TIMEOUT_S"
 def chat_timeout() -> httpx.Timeout:
     """Streaming read budget. Connect/pool stay short; the body may run long.
 
-    ``HYPERMESH_CHAT_READ_TIMEOUT_S`` defaults to 600. ``none`` waits on the
-    host with no read limit. The edge timeout in front of this process is
-    owned by infra and is not set here.
+    ``HYPERMESH_CHAT_READ_TIMEOUT_S`` defaults to 1800, matching the host
+    ``LLAMA_ARG_TIMEOUT`` and the HAProxy timeouts in infra#130. ``none``
+    waits on the host with no read limit. The edge timeout in front of this
+    process is owned by infra and is not set here.
     """
 
-    raw = os.environ.get(CHAT_READ_TIMEOUT_ENV, "600").strip().lower()
+    raw = os.environ.get(CHAT_READ_TIMEOUT_ENV, "1800").strip().lower()
     read: float | None
     if raw in {"", "none", "off", "inf", "infinite"}:
         read = None
@@ -47,7 +48,7 @@ def chat_timeout() -> httpx.Timeout:
         try:
             read = float(raw)
         except ValueError:
-            read = 600.0
+            read = 1800.0
         if read <= 0:
             read = None
     return httpx.Timeout(connect=10.0, read=read, write=60.0, pool=10.0)

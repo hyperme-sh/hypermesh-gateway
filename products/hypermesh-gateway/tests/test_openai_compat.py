@@ -61,7 +61,7 @@ def test_chat_timeout_defaults_and_env(monkeypatch):
     monkeypatch.delenv("HYPERMESH_CHAT_READ_TIMEOUT_S", raising=False)
     timeout = chat_timeout()
     assert timeout.connect == 10.0
-    assert timeout.read == 600.0
+    assert timeout.read == 1800.0
     assert timeout.write == 60.0
     assert timeout.pool == 10.0
     monkeypatch.setenv("HYPERMESH_CHAT_READ_TIMEOUT_S", "none")
@@ -91,7 +91,7 @@ async def test_proxy_chat_builds_streaming_timeout(monkeypatch):
         )
     timeout = seen["timeout"]
     assert timeout.connect == 10.0
-    assert timeout.read == 600.0
+    assert timeout.read == 1800.0
 
 
 def test_select_lease_rules():
