@@ -5,6 +5,14 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 COPY pyproject.toml uv.lock ./
 COPY core/lib/controlplane-db ./core/lib/controlplane-db
+COPY scripts/alembic_head.py /tmp/alembic_head.py
+ARG ALEMBIC_HEAD
+# Bake the Alembic head from the migrations copied above. See scripts/alembic_head.py.
+RUN python3 /tmp/alembic_head.py \
+      --versions /app/core/lib/controlplane-db/src/controlplane_db/alembic/versions \
+      --write /alembic-head \
+      --expect "${ALEMBIC_HEAD}"
+LABEL com.fyberlabs.alembic-head="${ALEMBIC_HEAD}"
 COPY core/events ./core/events
 COPY core/lib/controlplane-core ./core/lib/controlplane-core
 COPY products/hypermesh-gateway ./products/hypermesh-gateway
