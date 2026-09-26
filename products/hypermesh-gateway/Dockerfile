@@ -19,7 +19,9 @@ COPY products/hypermesh-gateway ./products/hypermesh-gateway
 # Ticket verify (honor_ticket) only. Not a uv workspace member; do not COPY products/hypermesh.
 COPY products/hypermesh/src/hypermesh_service/__init__.py /opt/hypermesh/src/hypermesh_service/__init__.py
 COPY products/hypermesh/src/hypermesh_service/ticket.py /opt/hypermesh/src/hypermesh_service/ticket.py
-RUN uv sync --frozen --no-dev --package hypermesh-gateway-service
+ARG CONTROLPLANE_SERVICEBUS=0
+RUN uv sync --frozen --no-dev --package hypermesh-gateway-service \
+ && if [ "$CONTROLPLANE_SERVICEBUS" = "1" ]; then uv pip install --python /app/.venv 'azure-servicebus>=7.12.0'; fi
 ENV PYTHONPATH=/app/core/lib/controlplane-core/src:/app/core/lib/controlplane-db/src:/app/core/events/src:/app/products/hypermesh-gateway/src:/opt/hypermesh/src
 WORKDIR /app/products/hypermesh-gateway
 CMD ["uv", "run", "--project", "/app/products/hypermesh-gateway", "python", "-m", "hypermesh_gateway_service.main"]
