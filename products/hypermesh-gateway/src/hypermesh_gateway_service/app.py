@@ -174,6 +174,9 @@ def create_app(
     logger.info(
         "Hypermesh gateway: health + /api/v1/hypermesh-gateway + /v1/chat/completions + /v1/ir"
     )
+    from api.infrastructure.metrics import install_http_metrics
+
+    install_http_metrics(app)
     return app
 
 
