@@ -25,7 +25,7 @@ RUN uv sync --frozen --no-dev --package hypermesh-gateway-service \
 ENV PYTHONPATH=/app/core/lib/controlplane-core/src:/app/core/lib/controlplane-db/src:/app/core/events/src:/app/products/hypermesh-gateway/src:/opt/hypermesh/src
 # GIT_SHA and BUILT_AT identify this image. Below the venv layer so a new
 # commit does not reinstall dependencies. imagetools carry keeps these
-# values; PANOPTICON_IMAGE_TAG is the deploy pointer /version prefers.
+# values. /version reports this build, not the deploy tag.
 ARG GIT_SHA=
 ARG BUILT_AT=
 ENV GIT_SHA=${GIT_SHA}
