@@ -12,6 +12,7 @@ from api.common.logging import configure_logging
 from api.common.utils import get_logger
 from api.infrastructure.service_cors import add_optional_service_cors
 from api.interfaces.api_controllers.health_endpoint import router as health_router
+from api.interfaces.api_controllers.version_endpoint import router as version_router
 
 from hypermesh_gateway_service.classify import Classifier, resolve_classifier
 from hypermesh_gateway_service.errors import INVALID_API_KEY_MESSAGE, DoorError, openai_error_body
@@ -160,6 +161,7 @@ def create_app(
     app.openapi = custom_openapi
 
     app.include_router(health_router, prefix="/api/v1")
+    app.include_router(version_router)
     app.include_router(hmg_router, prefix="/api/v1")
     app.include_router(openai_router)
     add_optional_service_cors(
