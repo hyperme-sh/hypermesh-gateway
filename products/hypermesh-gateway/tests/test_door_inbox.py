@@ -334,6 +334,8 @@ def test_resolve_approval_inbox_closed_without_url(monkeypatch):
     assert isinstance(resolve_approval_inbox(), ClosedApprovalInbox)
     monkeypatch.setenv("AIUDITOR_SERVICE_URL", "http://aiuditor-service:8000")
     assert isinstance(resolve_approval_inbox(), ClosedApprovalInbox)
+    monkeypatch.setenv("AIUDITOR_INTERNAL_TOKEN", "")
+    assert isinstance(resolve_approval_inbox(), ClosedApprovalInbox)
     monkeypatch.setenv("AIUDITOR_INTERNAL_TOKEN", "door-token")
     resolved = resolve_approval_inbox()
     assert isinstance(resolved, HttpApprovalInbox)
