@@ -43,7 +43,7 @@ class LeaseView:
 @dataclass(frozen=True)
 class GatewayTunnel:
     tunnel_id: uuid.UUID
-    lease_id: uuid.UUID
+    lease_id: uuid.UUID | None
     status: str
     endpoint: str
     server_private_key: str | None
@@ -100,7 +100,7 @@ class HttpControlPlane:
             out.append(
                 GatewayTunnel(
                     tunnel_id=uuid.UUID(str(row["tunnel_id"])),
-                    lease_id=uuid.UUID(str(row["lease_id"])),
+                    lease_id=uuid.UUID(str(row["lease_id"])) if row.get("lease_id") else None,
                     status=str(row["status"]),
                     endpoint=str(row["endpoint"]),
                     server_private_key=row.get("server_private_key"),
