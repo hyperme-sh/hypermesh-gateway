@@ -1075,6 +1075,8 @@ async def test_jwt_without_paid_ticket_is_instance_not_ready(
 @pytest.mark.asyncio
 async def test_http_plane_accepts_idle_host_peer_without_lease(monkeypatch):
     """An idle allocated peer remains syncable after its lease is detached (#206)."""
+    import httpx
+
     tenant_id = uuid.uuid4()
     tunnel_id = uuid.uuid4()
     row = {
