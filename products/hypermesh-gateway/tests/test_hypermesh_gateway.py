@@ -1070,3 +1070,28 @@ async def test_jwt_without_paid_ticket_is_instance_not_ready(
     assert refused.json()["error"]["code"] == "lease_not_owned"
     assert validator.calls == 1
     assert control_plane.get_lease_calls == 0
+
+
+@pytest.mark.asyncio
+async def test_http_plane_accepts_idle_host_peer_without_lease(monkeypatch):
+    """An idle allocated peer remains syncable after its lease is detached (#206)."""
+    import httpx
+
+    tenant_id = uuid.uuid4()
+    tunnel_id = uuid.uuid4()
+    row = {
+        "tunnel_id": str(tunnel_id), "lease_id": None,
+        "status": "allocated", "endpoint": "gateway.example.test:51820",
+        "server_private_key": "test-private-key", "server_public_key": "test-server-key",
+        "peer_public_key": "test-host-key", "allowed_ips": "10.77.0.0/24",
+        "client_address": "10.77.0.2/32",
+    }
+    original_client = httpx.AsyncClient
+    transport = httpx.MockTransport(lambda request: httpx.Response(200, json=[row]))
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: original_client(transport=transport, **kwargs))
+    tunnels = await HttpControlPlane("https://plane.example.test", "test-service-secret").list_tunnels(tenant_id)
+    assert len(tunnels) == 1
+    assert tunnels[0].lease_id is None
+    assert tunnels[0].tunnel_id == tunnel_id
+    assert tunnels[0].status == "allocated"
+    assert tunnels[0].client_address == row["client_address"]

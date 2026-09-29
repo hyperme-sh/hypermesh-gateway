@@ -639,7 +639,7 @@ async def list_tunnels(request: Request) -> list[dict[str, Any]]:
     return [
         {
             "tunnel_id": str(t.tunnel_id),
-            "lease_id": str(t.lease_id),
+            "lease_id": str(t.lease_id) if t.lease_id is not None else None,
             "status": t.status,
             "endpoint": t.endpoint,
             "client_address": t.client_address,
