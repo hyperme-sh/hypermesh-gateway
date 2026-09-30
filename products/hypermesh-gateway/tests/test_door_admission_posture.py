@@ -1,6 +1,7 @@
+from __future__ import annotations
+from gateway_host_fixture import FYBER_AGX_DEVICE_ID
 """Door refuses non-green compact-cert and unadmitted uploads."""
 
-from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime, timedelta
@@ -9,7 +10,7 @@ import pytest
 
 from hypermesh_gateway_service.posture import require_chat_posture
 from hypermesh_gateway_service.tickets import CachedTicket, TicketCache
-from hypermesh_service.seed import FYBER_AGX_DEVICE_ID, FYBER_TEST_GATEWAY_ID, MARKETPLACE_TENANT_ID
+from hypermesh_service.seed import (FYBER_TEST_GATEWAY_ID, MARKETPLACE_TENANT_ID)
 from hypermesh_service.ticket import TicketClaims, TicketNotReady, issue_ticket
 
 

@@ -1,6 +1,7 @@
+from __future__ import annotations
+from gateway_host_fixture import FYBER_AGX_DEVICE_ID
 """Bearer-only OpenAI door: lease choice, models, revoke, tool-call ids, SSE."""
 
-from __future__ import annotations
 
 import json
 import time
@@ -24,7 +25,7 @@ from hypermesh_gateway_service.route_resolve import (
     select_lease,
 )
 from hypermesh_gateway_service.tickets import CachedTicket, TicketCache
-from hypermesh_service.seed import FYBER_AGX_DEVICE_ID, FYBER_TEST_GATEWAY_ID
+from hypermesh_service.seed import (FYBER_TEST_GATEWAY_ID)
 from hypermesh_service.ticket import (
     RENTER_CHAT_PURPOSES,
     TicketClaims,

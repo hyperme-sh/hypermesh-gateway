@@ -1,4 +1,5 @@
 from __future__ import annotations
+from gateway_host_fixture import FYBER_AGX_DEVICE_ID
 
 import inspect
 import json
@@ -12,11 +13,7 @@ from hypermesh_gateway_service.chat import INSTANCE_NOT_READY, proxy_chat
 from hypermesh_gateway_service.control_plane import GatewayTunnel, HttpControlPlane, LeaseView
 from hypermesh_gateway_service.posture import require_chat_posture
 from hypermesh_gateway_service.tickets import CachedTicket, TicketCache, TicketPull
-from hypermesh_service.seed import (
-    FYBER_AGX_DEVICE_ID,
-    FYBER_TEST_GATEWAY_ID,
-    MARKETPLACE_TENANT_ID,
-)
+from hypermesh_service.seed import (FYBER_TEST_GATEWAY_ID, MARKETPLACE_TENANT_ID)
 from hypermesh_service.ticket import TicketClaims, TicketNotReady, issue_ticket, renter_key_fingerprint
 
 TEST_RENTER_KEY = "pk_test.renter-key"
