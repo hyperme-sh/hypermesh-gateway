@@ -1,3 +1,5 @@
+from __future__ import annotations
+from gateway_host_fixture import FYBER_AGX_DEVICE_ID
 """Hermetic gateway chat synthetic: ticket pull → mock host completions.
 
 Plane ``POST /renter/chat/completions`` is not the product. This suite
@@ -5,7 +7,6 @@ proxies one completion to ``http://127.0.0.1:<port>/v1/chat/completions``
 using the ticket's ``client_address`` (no live WG / AGX).
 """
 
-from __future__ import annotations
 
 import logging
 import uuid
@@ -16,11 +17,7 @@ import pytest
 from hypermesh_gateway_service.chat import CHAT_PORT_ENV
 from hypermesh_gateway_service.control_plane import GatewayTunnel
 from hypermesh_gateway_service.tickets import CachedTicket, TicketPull
-from hypermesh_service.seed import (
-    FYBER_AGX_DEVICE_ID,
-    FYBER_TEST_GATEWAY_ID,
-    MARKETPLACE_TENANT_ID,
-)
+from hypermesh_service.seed import (FYBER_TEST_GATEWAY_ID, MARKETPLACE_TENANT_ID)
 from hypermesh_service.ticket import TicketClaims, issue_ticket, renter_key_fingerprint
 
 TEST_RENTER_KEY = "pk_test.renter-key"

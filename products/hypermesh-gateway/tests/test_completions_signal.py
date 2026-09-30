@@ -1,6 +1,7 @@
+from __future__ import annotations
+from gateway_host_fixture import FYBER_AGX_DEVICE_ID
 """ /ready is process health. The completions signal is per lease and rate-limited."""
 
-from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime, timedelta
@@ -12,11 +13,7 @@ import pytest
 from hypermesh_gateway_service.chat import CHAT_PORT_ENV
 from hypermesh_gateway_service.completions_signal import SIGNAL_INTERVAL_ENV
 from hypermesh_gateway_service.tickets import CachedTicket
-from hypermesh_service.seed import (
-    FYBER_AGX_DEVICE_ID,
-    FYBER_TEST_GATEWAY_ID,
-    MARKETPLACE_TENANT_ID,
-)
+from hypermesh_service.seed import (FYBER_TEST_GATEWAY_ID, MARKETPLACE_TENANT_ID)
 from hypermesh_service.ticket import TicketClaims, issue_ticket
 
 TEST_RENTER_KEY = "pk_test.renter-key"
