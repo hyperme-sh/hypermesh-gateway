@@ -32,4 +32,4 @@ ARG BUILT_AT=
 ENV GIT_SHA=${GIT_SHA}
 ENV BUILT_AT=${BUILT_AT}
 WORKDIR /app/products/hypermesh-gateway
-CMD ["uv", "run", "--project", "/app/products/hypermesh-gateway", "python", "-m", "hypermesh_gateway_service.main"]
+CMD ["/app/.venv/bin/python", "-m", "hypermesh_gateway_service.main"]
