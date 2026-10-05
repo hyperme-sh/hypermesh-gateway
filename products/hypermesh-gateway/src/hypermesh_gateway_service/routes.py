@@ -475,7 +475,7 @@ async def _report_key_use(request: Request, key_id: uuid.UUID | None) -> None:
         except Exception:
             logger.info("key touch skipped")
         return
-    from api.core.config import settings
+    from controlplane_api.config import settings
 
     token = settings.usable_api_keys_internal_token()
     base = os.environ.get("HYPERMESH_API_KEYS_URL", "").strip()

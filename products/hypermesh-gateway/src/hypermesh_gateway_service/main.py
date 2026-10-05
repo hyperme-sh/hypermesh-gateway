@@ -4,7 +4,7 @@ import uvicorn
 
 
 def main() -> None:
-    from api.infrastructure.metrics import start_metrics_server
+    from controlplane_api.metrics import start_metrics_server
 
     start_metrics_server()
     from hypermesh_gateway_service.app import app

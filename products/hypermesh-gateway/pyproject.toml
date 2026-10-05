@@ -8,6 +8,7 @@ version = "0.1.0"
 requires-python = ">=3.13"
 description = "Hypermesh / Hyperme.sh Fyber router: WireGuard gateway and renter chat proxy"
 dependencies = [
+    "controlplane-api",
     "hypermesh-ticket",
     "controlplane-tenancy",
     "controlplane-identity",
@@ -28,6 +29,7 @@ dev = [
 ]
 
 [tool.uv.sources]
+controlplane-api = { workspace = true }
 hypermesh-ticket = { workspace = true }
 controlplane-tenancy = { workspace = true }
 controlplane-identity = { workspace = true }

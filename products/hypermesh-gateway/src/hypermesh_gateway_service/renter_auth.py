@@ -119,7 +119,7 @@ def verify_jwt_locally(
         except Exception:
             logger.info("renter jwt rejected")
             return None
-    from api.core.config import settings
+    from controlplane_api.config import settings
 
     if not (settings.keycloak_jwks_url and settings.keycloak_issuer):
         return None
@@ -287,7 +287,7 @@ def remote_key_validate_required() -> bool:
         return False
     raw = os.environ.get("FASTAPI_ENV")
     if raw is None or not raw.strip():
-        from api.core.config import settings
+        from controlplane_api.config import settings
 
         raw = settings.fastapi_env
     return (raw or "development").strip().lower() not in _LOCAL_ENVS
@@ -300,7 +300,7 @@ def remote_key_validate_enabled(request: Request) -> bool:
         return True
     if remote_key_validate_required():
         return True
-    from api.core.config import settings
+    from controlplane_api.config import settings
 
     return bool(settings.usable_api_keys_internal_token())
 
