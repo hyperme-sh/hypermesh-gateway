@@ -11,7 +11,7 @@ from fastapi import APIRouter, HTTPException, Request, status
 from pydantic import BaseModel, Field
 from starlette.responses import JSONResponse, StreamingResponse
 
-from api.common.internal_token import internal_token_matches
+from controlplane_identity.internal_token import internal_token_matches
 from hypermesh_gateway_service.chat import (
     ChatCompletionRequest,
     ProxiedChat,
