@@ -7,12 +7,12 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.responses import JSONResponse
 
-from api.common.exceptions import ForbiddenException, UnauthorizedException
-from api.common.logging import configure_logging
-from api.common.utils import get_logger
-from api.infrastructure.service_cors import add_optional_service_cors
-from api.interfaces.api_controllers.health_endpoint import router as health_router
-from api.interfaces.api_controllers.version_endpoint import router as version_router
+from controlplane_api.exceptions import ForbiddenException, UnauthorizedException
+from controlplane_api.logging import configure_logging
+from controlplane_api.utils import get_logger
+from controlplane_api.service_cors import add_optional_service_cors
+from controlplane_api.health import router as health_router
+from controlplane_api.version import router as version_router
 
 from hypermesh_gateway_service.classify import Classifier, resolve_classifier
 from hypermesh_gateway_service.errors import INVALID_API_KEY_MESSAGE, DoorError, openai_error_body
@@ -176,7 +176,7 @@ def create_app(
     logger.info(
         "Hypermesh gateway: health + /api/v1/hypermesh-gateway + /v1/chat/completions + /v1/ir"
     )
-    from api.infrastructure.metrics import install_http_metrics
+    from controlplane_api.metrics import install_http_metrics
 
     install_http_metrics(app)
     return app

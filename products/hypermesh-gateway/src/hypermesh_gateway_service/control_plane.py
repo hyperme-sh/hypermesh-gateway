@@ -175,7 +175,7 @@ class HttpControlPlane:
     async def list_key_index(self) -> list[KeyIndexEntry]:
         """Cross-tenant fingerprint index. Empty when the internal token is unset."""
 
-        from api.core.config import settings
+        from controlplane_api.config import settings
 
         token = (settings.hypermesh_internal_token or "").strip()
         if not token:

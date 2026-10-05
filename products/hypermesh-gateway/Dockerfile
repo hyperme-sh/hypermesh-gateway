@@ -14,6 +14,7 @@ RUN python3 /tmp/alembic_head.py \
       --expect "${ALEMBIC_HEAD}"
 LABEL com.fyberlabs.alembic-head="${ALEMBIC_HEAD}"
 COPY core/events ./core/events
+COPY core/lib/controlplane-api ./core/lib/controlplane-api
 COPY core/lib/controlplane-core ./core/lib/controlplane-core
 COPY core/lib/controlplane-identity ./core/lib/controlplane-identity
 COPY core/lib/controlplane-tenancy ./core/lib/controlplane-tenancy
