@@ -72,7 +72,7 @@ from hypermesh_gateway_service.route_resolve import (
 from hypermesh_gateway_service.tenants import MARKETPLACE_TENANT_ID
 from hypermesh_gateway_service.tickets import TicketCache
 from hypermesh_gateway_service.wg import apply_gateway, peer_counters, peer_is_up, remove_peer
-from hypermesh_service.ticket import (
+from hypermesh_ticket import (
     IR_CHAT_PURPOSES,
     RENTER_CHAT_PURPOSES,
     TicketClaims,

@@ -8,6 +8,7 @@ version = "0.1.0"
 requires-python = ">=3.13"
 description = "Hypermesh / Hyperme.sh Fyber router: WireGuard gateway and renter chat proxy"
 dependencies = [
+    "hypermesh-ticket",
     "controlplane-tenancy",
     "controlplane-identity",
     "controlplane-core",
@@ -27,6 +28,7 @@ dev = [
 ]
 
 [tool.uv.sources]
+hypermesh-ticket = { workspace = true }
 controlplane-tenancy = { workspace = true }
 controlplane-identity = { workspace = true }
 controlplane-core = { workspace = true }
@@ -34,7 +36,7 @@ controlplane-db = { workspace = true }
 controlplane-events = { workspace = true }
 
 [tool.hatch.build.targets.wheel]
-only-include = ["src/hypermesh_gateway_service"]
+packages = ["src/hypermesh_gateway_service"]
 
 [tool.hatch.build.targets.wheel.force-include]
 "src/hypermesh_gateway_service/packs/ir-taxonomy-v1.json" = "hypermesh_gateway_service/packs/ir-taxonomy-v1.json"
@@ -50,7 +52,6 @@ pythonpath = [
     "../../core/lib/controlplane-core/src",
     "../../core/lib/controlplane-db/src",
     "../../core/events/src",
-    "../hypermesh/src",
 ]
 testpaths = ["tests"]
 markers = [

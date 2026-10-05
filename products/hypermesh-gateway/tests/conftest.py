@@ -77,7 +77,7 @@ def app(control_plane, monkeypatch):
 async def http_client(app, tenant_id):
     import httpx
     from asgi_lifespan import LifespanManager
-    from hypermesh_service.ticket import renter_key_fingerprint
+    from hypermesh_ticket import renter_key_fingerprint
 
     async with LifespanManager(app):
         app.state.ticket_cache.accept_keys(

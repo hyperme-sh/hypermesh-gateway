@@ -10,8 +10,9 @@ import pytest
 
 from hypermesh_gateway_service.posture import require_chat_posture
 from hypermesh_gateway_service.tickets import CachedTicket, TicketCache
-from hypermesh_service.seed import (FYBER_TEST_GATEWAY_ID, MARKETPLACE_TENANT_ID)
-from hypermesh_service.ticket import TicketClaims, TicketNotReady, issue_ticket
+from gateway_host_fixture import FYBER_TEST_GATEWAY_ID
+from hypermesh_gateway_service.tenants import MARKETPLACE_TENANT_ID
+from hypermesh_ticket import TicketClaims, TicketNotReady, issue_ticket
 
 
 @pytest.fixture(autouse=True)
