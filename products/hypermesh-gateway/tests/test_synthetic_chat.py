@@ -17,8 +17,9 @@ import pytest
 from hypermesh_gateway_service.chat import CHAT_PORT_ENV
 from hypermesh_gateway_service.control_plane import GatewayTunnel
 from hypermesh_gateway_service.tickets import CachedTicket, TicketPull
-from hypermesh_service.seed import (FYBER_TEST_GATEWAY_ID, MARKETPLACE_TENANT_ID)
-from hypermesh_service.ticket import TicketClaims, issue_ticket, renter_key_fingerprint
+from gateway_host_fixture import FYBER_TEST_GATEWAY_ID
+from hypermesh_gateway_service.tenants import MARKETPLACE_TENANT_ID
+from hypermesh_ticket import TicketClaims, issue_ticket, renter_key_fingerprint
 
 TEST_RENTER_KEY = "pk_test.renter-key"
 TEST_RENTER_FINGERPRINTS = [renter_key_fingerprint(TEST_RENTER_KEY)]

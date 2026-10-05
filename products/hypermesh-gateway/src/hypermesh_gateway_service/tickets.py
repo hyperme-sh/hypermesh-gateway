@@ -16,7 +16,7 @@ from dataclasses import dataclass, field, replace
 from datetime import datetime
 from typing import Iterable
 
-from hypermesh_service.ticket import TicketClaims, TicketNotReady, honor_ticket
+from hypermesh_ticket import TicketClaims, TicketNotReady, honor_ticket
 
 PATH_B_GREEN = "green"
 # Enrolled hosts stamp green via compact_cert; lab hosts via path_b. Same wire.

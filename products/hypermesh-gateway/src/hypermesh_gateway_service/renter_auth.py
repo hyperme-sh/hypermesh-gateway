@@ -23,7 +23,7 @@ from collections.abc import Collection
 from dataclasses import dataclass
 from typing import Any, Literal, Protocol
 
-from hypermesh_service.ticket import renter_key_fingerprint
+from hypermesh_ticket import renter_key_fingerprint
 
 from fastapi import HTTPException, Request
 

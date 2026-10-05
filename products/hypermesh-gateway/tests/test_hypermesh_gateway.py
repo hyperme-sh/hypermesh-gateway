@@ -13,8 +13,9 @@ from hypermesh_gateway_service.chat import INSTANCE_NOT_READY, proxy_chat
 from hypermesh_gateway_service.control_plane import GatewayTunnel, HttpControlPlane, LeaseView
 from hypermesh_gateway_service.posture import require_chat_posture
 from hypermesh_gateway_service.tickets import CachedTicket, TicketCache, TicketPull
-from hypermesh_service.seed import (FYBER_TEST_GATEWAY_ID, MARKETPLACE_TENANT_ID)
-from hypermesh_service.ticket import TicketClaims, TicketNotReady, issue_ticket, renter_key_fingerprint
+from gateway_host_fixture import FYBER_TEST_GATEWAY_ID
+from hypermesh_gateway_service.tenants import MARKETPLACE_TENANT_ID
+from hypermesh_ticket import TicketClaims, TicketNotReady, issue_ticket, renter_key_fingerprint
 
 TEST_RENTER_KEY = "pk_test.renter-key"
 TEST_RENTER_FINGERPRINTS = [renter_key_fingerprint(TEST_RENTER_KEY)]

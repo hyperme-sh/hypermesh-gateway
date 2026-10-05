@@ -15,7 +15,7 @@ from hypermesh_gateway_service.tickets import (
     PATH_B_GREEN,
     TicketCache,
 )
-from hypermesh_service.ticket import TicketClaims, TicketNotReady
+from hypermesh_ticket import TicketClaims, TicketNotReady
 
 # Compact-cert green travels as path_b_state on the host. Same wire value.
 assert COMPACT_CERT_GREEN == PATH_B_GREEN

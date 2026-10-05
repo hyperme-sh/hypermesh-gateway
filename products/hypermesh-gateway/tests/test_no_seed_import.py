@@ -1,8 +1,4 @@
-"""Regression: gateway runtime must boot without hypermesh_service.seed.
-
-#72 imported MARKETPLACE_TENANT_ID from hypermesh_service.seed. The GHCR
-hypermesh-gateway image only copies ticket.py, so that import Exited(1).
-"""
+"""Gateway source and images use the family protocol without service internals."""
 
 from __future__ import annotations
 
@@ -16,39 +12,36 @@ ROUTER_SRC = ROUTER_ROOT / "src" / "hypermesh_gateway_service"
 ROUTER_DOCKERFILE = ROUTER_ROOT / "Dockerfile"
 
 
-def _seed_import_hits(path: Path) -> list[str]:
+def _service_import_hits(path: Path) -> list[str]:
     tree = ast.parse(path.read_text(), filename=str(path))
     hits: list[str] = []
     for node in ast.walk(tree):
         if isinstance(node, ast.ImportFrom):
             module = node.module or ""
-            if module == "hypermesh_service.seed" or module.startswith("hypermesh_service.seed."):
+            if module == "hypermesh_service" or module.startswith("hypermesh_service."):
                 hits.append(f"{path.name}:{node.lineno}")
-            if module == "hypermesh_service":
-                for alias in node.names:
-                    if alias.name == "seed":
-                        hits.append(f"{path.name}:{node.lineno}")
         elif isinstance(node, ast.Import):
             for alias in node.names:
-                if alias.name == "hypermesh_service.seed" or alias.name.startswith(
-                    "hypermesh_service.seed."
+                if alias.name == "hypermesh_service" or alias.name.startswith(
+                    "hypermesh_service."
                 ):
                     hits.append(f"{path.name}:{node.lineno}")
     return hits
 
 
-def test_gateway_runtime_source_does_not_import_hypermesh_service_seed():
+def test_gateway_runtime_source_does_not_import_hypermesh_service():
     offenders: list[str] = []
     for path in ROUTER_SRC.rglob("*.py"):
-        offenders.extend(_seed_import_hits(path))
-    assert offenders == [], f"gateway image does not ship seed.py: {offenders}"
+        offenders.extend(_service_import_hits(path))
+    assert offenders == [], f"gateway image does not ship Hypermesh service files: {offenders}"
 
 
 def test_gateway_dockerfile_does_not_copy_hypermesh_service_seed():
     text = ROUTER_DOCKERFILE.read_text()
     assert "hypermesh_service/seed.py" not in text
-    assert "hypermesh_service/ticket.py" in text
-    assert "do not COPY products/hypermesh" in text
+    assert "hypermesh_service/ticket.py" not in text
+    assert "COPY products/hypermesh " not in text
+    assert "COPY products/hypermesh-ticket " in text
 
 
 def test_routes_reload_does_not_load_hypermesh_service_seed():

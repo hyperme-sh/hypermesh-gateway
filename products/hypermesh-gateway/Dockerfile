@@ -17,14 +17,12 @@ COPY core/events ./core/events
 COPY core/lib/controlplane-core ./core/lib/controlplane-core
 COPY core/lib/controlplane-identity ./core/lib/controlplane-identity
 COPY core/lib/controlplane-tenancy ./core/lib/controlplane-tenancy
+COPY products/hypermesh-ticket ./products/hypermesh-ticket
 COPY products/hypermesh-gateway ./products/hypermesh-gateway
-# Ticket verify (honor_ticket) only. Not a uv workspace member; do not COPY products/hypermesh.
-COPY products/hypermesh/src/hypermesh_service/__init__.py /opt/hypermesh/src/hypermesh_service/__init__.py
-COPY products/hypermesh/src/hypermesh_service/ticket.py /opt/hypermesh/src/hypermesh_service/ticket.py
 ARG CONTROLPLANE_SERVICEBUS=0
 RUN uv sync --frozen --no-dev --package hypermesh-gateway-service \
  && if [ "$CONTROLPLANE_SERVICEBUS" = "1" ]; then uv pip install --python /app/.venv 'azure-servicebus>=7.12.0'; fi
-ENV PYTHONPATH=/app/core/lib/controlplane-core/src:/app/core/lib/controlplane-db/src:/app/core/events/src:/app/products/hypermesh-gateway/src:/opt/hypermesh/src
+ENV PYTHONPATH=/app/core/lib/controlplane-core/src:/app/core/lib/controlplane-db/src:/app/core/events/src:/app/products/hypermesh-gateway/src
 # GIT_SHA and BUILT_AT identify this image. Below the venv layer so a new
 # commit does not reinstall dependencies. imagetools carry keeps these
 # values. /version reports this build, not the deploy tag.

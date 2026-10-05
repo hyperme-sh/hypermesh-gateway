@@ -6,7 +6,7 @@ import uuid
 
 import pytest
 
-from hypermesh_service.ticket import renter_key_fingerprint
+from hypermesh_ticket import renter_key_fingerprint
 from test_hypermesh_gateway import _AcceptJwt, _mock_runtime, _signed_ticket
 
 

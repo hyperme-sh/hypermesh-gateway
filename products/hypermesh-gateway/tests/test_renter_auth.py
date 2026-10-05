@@ -26,7 +26,7 @@ from hypermesh_gateway_service.renter_auth import (
     require_ticket_bound_grant,
     verify_jwt_locally,
 )
-from hypermesh_service.ticket import renter_key_fingerprint
+from hypermesh_ticket import renter_key_fingerprint
 
 
 class _AcceptJwt:
