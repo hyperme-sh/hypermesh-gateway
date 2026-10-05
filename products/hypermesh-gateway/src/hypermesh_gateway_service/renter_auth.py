@@ -108,7 +108,7 @@ def verify_jwt_locally(
     JWKS (when used) is the cached local verify Keycloak already publishes.
     """
 
-    from api.infrastructure.security.api_key_exchange_jwt import try_decode_api_key_session_jwt
+    from controlplane_identity.security.api_key_exchange_jwt import try_decode_api_key_session_jwt
 
     exchanged = try_decode_api_key_session_jwt(token)
     if exchanged is not None:
@@ -124,7 +124,7 @@ def verify_jwt_locally(
     if not (settings.keycloak_jwks_url and settings.keycloak_issuer):
         return None
     try:
-        from api.infrastructure.security.keycloak_jwt import get_keycloak_jwt_validator
+        from controlplane_identity.security.keycloak_jwt import get_keycloak_jwt_validator
 
         return get_keycloak_jwt_validator().validate_sync(token)
     except Exception:
@@ -353,7 +353,7 @@ async def _validate_presented_key(
         return None
     validate = getattr(request.app.state, "api_key_validator", None)
     if validate is None:
-        from api.infrastructure.externals.api_keys_client import validate_api_key_remote
+        from controlplane_identity.api_keys_client import validate_api_key_remote
 
         validate = validate_api_key_remote
     return await validate(base_url=base_url, api_key=raw_key, tenant_id=tenant_id)
@@ -394,7 +394,7 @@ async def require_tenant_bound_grant(request: Request, tenant_id: uuid.UUID) -> 
 
     validate = getattr(request.app.state, "api_key_validator", None)
     if validate is None:
-        from api.infrastructure.externals.api_keys_client import validate_api_key_remote
+        from controlplane_identity.api_keys_client import validate_api_key_remote
 
         validate = validate_api_key_remote
 

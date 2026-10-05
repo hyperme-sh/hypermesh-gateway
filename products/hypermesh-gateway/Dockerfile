@@ -15,6 +15,8 @@ RUN python3 /tmp/alembic_head.py \
 LABEL com.fyberlabs.alembic-head="${ALEMBIC_HEAD}"
 COPY core/events ./core/events
 COPY core/lib/controlplane-core ./core/lib/controlplane-core
+COPY core/lib/controlplane-identity ./core/lib/controlplane-identity
+COPY core/lib/controlplane-tenancy ./core/lib/controlplane-tenancy
 COPY products/hypermesh-gateway ./products/hypermesh-gateway
 # Ticket verify (honor_ticket) only. Not a uv workspace member; do not COPY products/hypermesh.
 COPY products/hypermesh/src/hypermesh_service/__init__.py /opt/hypermesh/src/hypermesh_service/__init__.py
