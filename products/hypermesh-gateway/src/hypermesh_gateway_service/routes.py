@@ -221,7 +221,7 @@ async def refresh_assignments(
     cache: TicketCache,
     tenant_id: uuid.UUID,
 ) -> list[GatewayTunnel]:
-    """hm_gw_ pull. Updates revoke / Path B cache. Does not flap the host peer."""
+    """hm_gw_ pull. Updates revoke / certification-state cache. Does not flap the host peer."""
 
     tunnels = await plane.list_tunnels(tenant_id)
     pull = await plane.list_tickets(tenant_id)
