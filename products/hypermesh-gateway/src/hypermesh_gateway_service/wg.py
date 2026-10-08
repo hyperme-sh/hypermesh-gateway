@@ -2,7 +2,7 @@
 
 One WireGuard peer per HOST, not per lease. Apply that peer once. A standing
 wg-hm iface still receives the peer. Do not add or drop a peer on
-lease_start or lease_stop. remove_peer is host teardown only (Path B fail /
+lease_start or lease_stop. remove_peer is host teardown only (failed certification /
 device revoke).
 
 Panopticon assigns keys. This process holds the gateway private key and

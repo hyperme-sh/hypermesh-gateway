@@ -64,7 +64,7 @@ invalid override fails closed (hold). Do not log the prompt.
 ## Non-goals
 
 - Not a detector, CASB, or jailbreak-as-a-service
-- No AGX / Path B / live chat unlock
+- No AGX / host certification / live chat unlock
 - No prompt bodies to the plane / Azure Monitor / Service Bus
 - No hyperme.sh page, no AIuditor launch marketing
 - No second proxy, no second IdP, no SociACL Phase 1
