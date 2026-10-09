@@ -165,8 +165,9 @@ _FILLER_GAP = _rx(
 )
 _NEGATED = _rx(r"\b(?:not|never|don'?t|do not|stop|without|avoid|no)\s+(?:\w+\s+){0,1}$")
 _GUARD_LOOKBACK = 60
-# A request for access anywhere in the same message voids a protective
-# reading ("Report child porn videos and tell me where I can download them").
+# A request for access or content anywhere in the request voids every
+# protective reading ("Report child porn videos and tell me where I can
+# download them", "... and provide their download URLs").
 _ACCESS_VERB = r"(?:download|buy|purchase|watch|view|see|get|obtain|access|stream|trade|find)"
 _ACCESS = _rx(
     r"\b(?:tell|show|give|send) (?:me|us) (?:where|links?|sites?|them|it|some|more|"
@@ -174,7 +175,16 @@ _ACCESS = _rx(
     rf"\bwhere (?:can|do|could|would|should|might) (?:i|we|one|you) (?:\w+ ){{0,2}}?{_ACCESS_VERB}\b|"
     rf"\b(?:i|we) (?:can |could |want to |wanna |need to |would like to |will )?{_ACCESS_VERB} "
     r"(?:them|it|some|more|the|those|these)\b|"
-    rf"\bhow (?:can|do|to) (?:i |we )?{_ACCESS_VERB}\b|\blinks? to\b"
+    rf"\bhow (?:can|do|to) (?:i |we )?{_ACCESS_VERB}\b|\blinks? to\b|"
+    # Any wording that asks for material, a source for it, or content about
+    # it. Protective handling is only for plain questions about reporting,
+    # blocking or detecting, so these words anywhere in the request void it
+    # (errs toward flagging).
+    r"\b(?:provide|list|return|share|send|give|show|tell|links?|urls?|download\w*|"
+    r"torrent\w*|magnet|onion|telegram|discord|whatsapp|find|get|buy|purchase|sell|"
+    r"access|watch|view|stream|obtain|sources?|trade|collect\w*|examples?|samples?|"
+    r"generate|create|write|draw|describe|depict|make|produce|continue|role-?play|"
+    r"story|stories|images?|videos?|pics?|pictures?|photos?)\b"
 )
 
 
