@@ -86,7 +86,7 @@ The edge `timeout client` / `timeout server` in front of this process is owned b
 
 ## Automated safety screening
 
-Every request on `/v1/chat/completions` and `/v1/ir/chat/completions` (and the sibling routes) is screened in process before it reaches the host (`safety.py`). The screen covers a small set of severe categories:
+Every request on `/v1/chat/completions` and `/v1/ir/chat/completions` (and the sibling routes) is screened in process before it reaches the host (`safety.py`). Every string the door forwards is screened: message content, tool-call arguments, tool definitions and extra body fields (structural keys and data URLs are skipped). The screen covers a small set of severe categories:
 
 | Category | `category` | Default action |
 |----------|------------|----------------|
@@ -102,7 +102,7 @@ Every request on `/v1/chat/completions` and `/v1/ir/chat/completions` (and the s
 - `HYPERMESH_SAFETY_TIMEOUT_MS` (default 250) bounds classification. Text beyond 256K characters is screened as head plus tail.
 - `HYPERMESH_SAFETY_FAIL_MODE`: `open` (default) serves the request unscreened when the classifier errors or runs past its budget and logs the failure without text; `closed` refuses with `503 safety_screening_unavailable`. Neither stores anything.
 - `HYPERMESH_SAFETY_SCREENING=off` disables screening.
-- If the control plane is unreachable, a record waits in process memory (never on disk) and is retried on the refresh loop. A restart drops records still waiting.
+- If the control plane is unreachable, a record waits in process memory (never on disk) and is retried on the refresh loop. At most 1000 wait; past that the oldest is evicted and logged at error level with its id and category. A restart drops records still waiting.
 - Request text never goes to logs, metrics, telemetry or events. Log lines carry category, action, classifier version, lease id and record id only.
 - The bundled classifier is a deterministic rules baseline (`safety-rules-v1`). `SafetyClassifier` is the seam for a model classifier later; pass one to `create_app(safety_classifier=...)`.
 

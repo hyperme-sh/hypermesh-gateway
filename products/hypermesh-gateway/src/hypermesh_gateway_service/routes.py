@@ -194,7 +194,7 @@ async def _screen(
 
     if not screening_enabled():
         return
-    text = screened_text(body.messages)
+    text = screened_text(body.model_dump(mode="json"))
     if not text:
         return
     classifier = _safety_classifier(request)

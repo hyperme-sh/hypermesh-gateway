@@ -104,8 +104,9 @@ class _Rule:
     rule_id: str
     category: str
     pattern: re.Pattern[str]
-    # Any of these within the matched span's neighborhood suppresses the rule.
-    guard: re.Pattern[str] | None = None
+    # Protective phrasing on the same line, directly before or inside the
+    # match, suppresses the rule.
+    guarded: bool = False
 
 
 def _rx(source: str) -> re.Pattern[str]:
@@ -122,10 +123,30 @@ _SEXUAL = (
     r"sex with|having sex|sexual (?:roleplay|role-play|story|fantasy|content|scene)s?|"
     r"(?:nude|naked) (?:photo|pic|picture|image|video|selfie)s?)"
 )
+# Protective phrasing directly governing the match ("how do I report ...",
+# "keep my kids away from ...", "parental controls for ..."). It only counts
+# inside the same line as the match, so another message (each message is its
+# own line group) or a system prompt cannot suppress a flag, and a negated
+# verb ("do not block ...") does not count.
 _PROTECTIVE = _rx(
-    r"\b(?:block|filter|protect|prevent|report|parental|safe(?:ty|guard)?|"
-    r"keep (?:\w+ )?away|detect|warning signs?)\b"
+    r"\b(?:report(?:ing)?|block(?:ing)?|filter(?:ing)?|detect(?:ing)?|prevent(?:ing)?|"
+    r"protect(?:ing)? (?:\w+ ){0,3}(?:from|against)|keep (?:\w+ ){0,3}away from|"
+    r"parental controls?)\b"
 )
+_NEGATED = _rx(r"\b(?:not|never|don'?t|do not|stop|without|avoid|no)\s+(?:\w+\s+){0,1}$")
+_GUARD_LOOKBACK = 60
+
+
+def _protective_context(sample: str, start: int, end: int) -> bool:
+    line_start = max(sample.rfind("\n", 0, start), sample.rfind(".", 0, start),
+                     sample.rfind("?", 0, start), sample.rfind("!", 0, start)) + 1
+    lo = max(line_start, start - _GUARD_LOOKBACK)
+    for found in _PROTECTIVE.finditer(sample, lo, end):
+        if _NEGATED.search(sample, max(lo, found.start() - 30), found.start()):
+            continue
+        return True
+    return False
+
 
 _RULES: tuple[_Rule, ...] = (
     _Rule(
@@ -133,13 +154,13 @@ _RULES: tuple[_Rule, ...] = (
         CATEGORY_CSAM,
         _rx(r"\b(?:csam|child porn\w*|kiddie porn\w*|pedo ?porn\w*|"
             r"(?:loli|shota)(?:con)? (?:hentai|porn\w*|nsfw|lewd))\b"),
-        _PROTECTIVE,
+        guarded=True,
     ),
     _Rule(
         "csam.minor_sexual",
         CATEGORY_CSAM,
         _rx(rf"\b{_MINOR}\b.{{0,60}}\b{_SEXUAL}|\b{_SEXUAL}.{{0,60}}\b{_MINOR}\b"),
-        _PROTECTIVE,
+        guarded=True,
     ),
     _Rule(
         "self_harm.intent",
@@ -219,11 +240,8 @@ class RulesSafetyClassifier:
         sample = bounded_sample(text)
         for rule in self._rules:
             for match in rule.pattern.finditer(sample):
-                if rule.guard is not None:
-                    lo = max(0, match.start() - 80)
-                    hi = min(len(sample), match.end() + 80)
-                    if rule.guard.search(sample, lo, hi):
-                        continue
+                if rule.guarded and _protective_context(sample, match.start(), match.end()):
+                    continue
                 return SafetyFlag(
                     category=rule.category,
                     rule_id=rule.rule_id,
@@ -289,20 +307,40 @@ def fail_closed() -> bool:
     return (os.environ.get(FAIL_MODE_ENV) or "open").strip().lower() == "closed"
 
 
-def screened_text(messages: list[dict[str, Any]] | None) -> str:
-    """Every message's text, any role. Caller must not log it."""
+_STRUCTURAL_KEYS = frozenset({"role", "type", "id", "tool_call_id", "model", "lease_id"})
+_MAX_DEPTH = 32
+
+
+def screened_text(payload: dict[str, Any] | list[Any] | None) -> str:
+    """Every string forwarded to the host, messages first. Caller must not log it.
+
+    Walks the whole request body (message content, tool-call arguments, tool
+    definitions and any extra field) so nothing reaches the host unscreened.
+    Structural keys (role, type, ids, model, lease_id) and data URLs are skipped.
+    """
 
     parts: list[str] = []
-    for item in messages or []:
-        if not isinstance(item, dict):
-            continue
-        content = item.get("content")
-        if isinstance(content, str):
-            parts.append(content)
-        elif isinstance(content, list):
-            for block in content:
-                if isinstance(block, dict) and isinstance(block.get("text"), str):
-                    parts.append(block["text"])
+
+    def walk(value: Any, depth: int) -> None:
+        if depth > _MAX_DEPTH:
+            return
+        if isinstance(value, str):
+            if value and not value.startswith("data:"):
+                parts.append(value)
+        elif isinstance(value, dict):
+            for key, item in value.items():
+                if key in _STRUCTURAL_KEYS and isinstance(item, str):
+                    continue
+                walk(item, depth + 1)
+        elif isinstance(value, list):
+            for item in value:
+                walk(item, depth + 1)
+
+    if isinstance(payload, dict):
+        walk(payload.get("messages"), 0)
+        walk({k: v for k, v in payload.items() if k != "messages"}, 0)
+    else:
+        walk(payload, 0)
     return "\n".join(parts)
 
 
@@ -351,17 +389,35 @@ class SafetyRecorder:
     """Sends flagged records to the control plane.
 
     A record that cannot be sent waits in process memory (never on disk) and
-    is retried by the refresh loop. A restart drops records still waiting.
+    is retried by the refresh loop. At most ``max_pending`` records wait; past
+    that the oldest is evicted, counted in ``dropped`` and logged at error
+    level (id and category only). A restart drops records still waiting.
     """
 
-    pending: deque[SafetyRecord] = field(default_factory=lambda: deque(maxlen=_MAX_PENDING))
+    pending: deque[SafetyRecord] = field(default_factory=deque)
     send_timeout_s: float = 2.0
+    max_pending: int = _MAX_PENDING
+    dropped: int = 0
 
     async def record(self, control_plane: Any, record: SafetyRecord) -> bool:
         if await self._send(control_plane, record):
             return True
-        self.pending.append(record)
+        self._enqueue(record)
         return False
+
+    def _enqueue(self, record: SafetyRecord) -> None:
+        """Keep the newest records. Every eviction is counted and logged."""
+
+        while len(self.pending) >= self.max_pending:
+            lost = self.pending.popleft()
+            self.dropped += 1
+            logger.error(
+                "safety record dropped: pending queue full id=%s category=%s dropped_total=%d",
+                lost.id,
+                lost.category,
+                self.dropped,
+            )
+        self.pending.append(record)
 
     async def flush(self, control_plane: Any) -> int:
         sent = 0
