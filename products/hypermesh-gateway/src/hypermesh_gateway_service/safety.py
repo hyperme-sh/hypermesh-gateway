@@ -400,6 +400,29 @@ def fail_closed() -> bool:
 
 
 _STRUCTURAL_KEYS = frozenset({"role", "type", "id", "tool_call_id", "model", "lease_id"})
+_ROLES = frozenset({"system", "user", "assistant", "tool", "developer", "function"})
+_IDENTIFIER = re.compile(r"[A-Za-z0-9_.:/@+-]{1,128}")
+_IDENTIFIER_PUNCT = re.compile(r"[_.:/@+-]+")
+
+
+def _structural_value(key: object, value: object) -> bool:
+    """True when a structural field holds a value that carries no free text.
+
+    The key name alone is not enough: extras may nest a ``role`` or ``id`` key
+    anywhere. A role must be a real chat role; any other structural value must
+    be a single identifier (no spaces) that does not spell an explicit CSAM
+    term. Anything else is screened.
+    """
+
+    if key not in _STRUCTURAL_KEYS or not isinstance(value, str):
+        return False
+    if key == "role":
+        return value in _ROLES
+    if not _IDENTIFIER.fullmatch(value):
+        return False
+    return _CSAM_NAMED.search(_IDENTIFIER_PUNCT.sub(" ", value)) is None and \
+        _CSAM_NAMED.search(value) is None
+
 _MEDIA_KEYS = frozenset({"url", "image_url", "data", "file_data"})
 # Field names of the chat request and of JSON Schema. Any other dictionary key
 # (a tool-schema property name, an extra field) is free text the host sees, so
@@ -440,7 +463,7 @@ def _strings(value: Any) -> list[str]:
         elif isinstance(item, dict):
             children: list[tuple[Any, str | None]] = []
             for child_key, child in item.items():
-                if child_key in _STRUCTURAL_KEYS and isinstance(child, str):
+                if _structural_value(child_key, child):
                     continue
                 # Keys reach the host too (tool-schema property names, extra
                 # fields), so they are screened like values.
@@ -491,7 +514,13 @@ def screened_text(payload: dict[str, Any] | list[Any] | None) -> str:
             if segment:
                 previous_role = role
         for key, value in payload.items():
-            if key == "messages" or (key in _STRUCTURAL_KEYS and isinstance(value, str)):
+            if key == "messages":
+                continue
+            if key in {"model", "lease_id"} and isinstance(value, str) and _IDENTIFIER.fullmatch(value):
+                # Routing fields at their real position; the host never shows
+                # them to the model.
+                continue
+            if _structural_value(key, value):
                 continue
             if key not in _SCHEMA_KEYS:
                 lines.append(_segment([str(key)]))
