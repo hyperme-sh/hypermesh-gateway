@@ -1491,3 +1491,33 @@ async def test_noisy_tenant_only_replaces_its_own_evidence_and_other_tenants_rec
     assert await recorder.flush(Recovered()) == 4
     assert evidence.id in delivered and newcomer.id in delivered
     assert not recorder.pending
+
+
+@pytest.mark.asyncio
+async def test_in_flight_retry_keeps_its_tenant_capacity_reserved():
+    from dataclasses import replace
+    from datetime import UTC, datetime
+    from hypermesh_gateway_service.safety import SafetyRecord
+
+    recorder = SafetyRecorder(max_pending=6, max_pending_per_tenant=2)
+    first = SafetyRecord(id=uuid.uuid4(), tenant_id=uuid.uuid4(), lease_id=uuid.uuid4(),
+        subject="pk", category=CATEGORY_SELF_HARM, action="allow", rule_id="r",
+        classifier_version=RULES_VERSION, door="chat", flagged_text=SELF_HARM,
+        occurred_at=datetime.now(UTC))
+    second, third = replace(first, id=uuid.uuid4()), replace(first, id=uuid.uuid4())
+    recorder._enqueue(first)
+    recorder._enqueue(second)
+    entered, release = asyncio.Event(), asyncio.Event()
+    class Down:
+        async def post_safety_flag(self, item):
+            entered.set()
+            await release.wait()
+            raise RuntimeError("outage")
+    flush = asyncio.create_task(recorder.flush(Down()))
+    await entered.wait()
+    recorder._enqueue(third)
+    assert len(recorder.pending) == 2 and recorder.dropped == 1
+    release.set()
+    assert await flush == 0
+    assert list(recorder.pending) == [second, third]
+    assert recorder.dropped == 1
