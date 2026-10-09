@@ -40,6 +40,7 @@ import logging
 import os
 import re
 import uuid
+from urllib.parse import unquote
 from collections import deque
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -423,8 +424,8 @@ def _structural_value(key: object, value: object) -> bool:
 
     The key name alone is not enough: extras may nest a ``role`` or ``id`` key
     anywhere. A role must be a real chat role; any other structural value must
-    be a single identifier (no spaces) that does not spell an explicit CSAM
-    term. Anything else is screened.
+    be a single identifier (no spaces) that, read with its separators as
+    spaces, matches neither CSAM pattern. Anything else is screened.
     """
 
     if key not in _STRUCTURAL_KEYS or not isinstance(value, str):
@@ -433,8 +434,12 @@ def _structural_value(key: object, value: object) -> bool:
         return value in _ROLES
     if not _IDENTIFIER.fullmatch(value):
         return False
-    return _CSAM_NAMED.search(_IDENTIFIER_PUNCT.sub(" ", value)) is None and \
-        _CSAM_NAMED.search(value) is None
+    spaced = _IDENTIFIER_PUNCT.sub(" ", value)
+    return not any(
+        pattern.search(candidate)
+        for pattern in (_CSAM_NAMED, _CSAM_MINOR_SEXUAL)
+        for candidate in (value, spaced)
+    )
 
 _MEDIA_KEYS = frozenset({"url", "image_url", "data", "file_data"})
 # Field names of the chat request and of JSON Schema. Any other dictionary key
@@ -479,6 +484,11 @@ def _media_strings(item: str) -> list[str]:
     read by the rules baseline and passes unscreened.
     """
 
+    if item[:5].lower() == "data:" and ";base64," not in item.split(",", 1)[0].lower() + ",":
+        # A plain (percent-encoded) data URL is text whatever its type:
+        # screen it decoded.
+        payload = item.split(",", 1)[1] if "," in item else ""
+        return [unquote(payload)] if payload else []
     parts = _DATA_URL_PARTS.match(item)
     if parts is not None and _DATA_URL.match(item):
         if parts.group(1).lower() in _MEDIA_TYPES:
