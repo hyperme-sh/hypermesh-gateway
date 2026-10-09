@@ -103,7 +103,7 @@ Every request on `/v1/chat/completions` and `/v1/ir/chat/completions` (and the s
 - Each message is screened as one line (content parts and tool calls joined); rules do not match across messages or fields. When several categories match, a blocking category wins.
 - `HYPERMESH_SAFETY_FAIL_MODE`: `open` (default) serves the request unscreened when the classifier errors or runs past its budget and logs the failure without text; `closed` refuses with `503 safety_screening_unavailable`. Neither stores anything.
 - `HYPERMESH_SAFETY_SCREENING=off` disables screening.
-- If the control plane is unreachable, a record waits in process memory (never on disk) and is retried on the refresh loop. At most 1000 wait; past that the oldest is evicted and logged at error level with its id and category. A restart drops records still waiting.
+- If the control plane is unreachable, a record waits in process memory (never on disk) and is retried on the refresh loop. At most 1000 wait; past that the oldest is evicted and logged at error level with its id and category. A restart drops records still waiting. A record the control plane rejects outright (a 4xx other than 401, 403, 404, 408, 409, 425 or 429) is dropped and logged with its id, category and status so it cannot block the records behind it.
 - Request text never goes to logs, metrics, telemetry or events. Log lines carry category, action, classifier version, lease id and record id only.
 - The bundled classifier is a deterministic rules baseline (`safety-rules-v1`). `SafetyClassifier` is the seam for a model classifier later; pass one to `create_app(safety_classifier=...)`.
 

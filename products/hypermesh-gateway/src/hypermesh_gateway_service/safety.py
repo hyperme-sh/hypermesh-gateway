@@ -138,15 +138,28 @@ _SEXUAL = (
     r"sex with|having sex|sexual (?:roleplay|role-play|story|fantasy|content|scene)s?|"
     r"(?:nude|naked) (?:photo|pic|picture|image|video|selfie)s?)"
 )
-# Protective phrasing directly governing the match ("how do I report ...",
-# "keep my kids away from ...", "parental controls for ..."). It only counts
-# inside the same line as the match, so another message (each message is its
-# own line group) or a system prompt cannot suppress a flag, and a negated
-# verb ("do not block ...") does not count.
+# Protective phrasing that governs the match ("how do I report ...", "block
+# ... sites", "keep my kids away from ..."). It counts only when it takes the
+# match as its object: it overlaps the start of the match, or only filler words
+# ("the", "suspected", "online", ...) sit between it and the match. Words that
+# are also nouns ("a report containing ...", "the filter for ...") do not count
+# after a determiner. A negated verb ("do not block ...") does not count. All
+# of this stays on the match's own line, so another message or a system prompt
+# cannot suppress a flag.
 _PROTECTIVE = _rx(
     r"\b(?:report(?:ing)?|block(?:ing)?|filter(?:ing)?|detect(?:ing)?|prevent(?:ing)?|"
     r"protect(?:ing)? (?:\w+ ){0,3}(?:from|against)|keep (?:\w+ ){0,3}away from|"
     r"parental controls?)\b"
+)
+_NOUN_CAPABLE = _rx(r"^(?:report|block|filter)")
+_DETERMINER_BEFORE = _rx(
+    r"\b(?:a|an|the|this|that|these|those|my|your|our|their|his|her|its)\s+"
+    r"(?:(?:full|detailed|short|long|brief|written|quick|new|final|weekly|monthly|"
+    r"daily|public|internal|simple|custom)\s+)?$"
+)
+_FILLER_GAP = _rx(
+    r"^(?:\s*(?:a|an|the|any|all|some|such|this|that|these|those|suspected|possible|"
+    r"potential|apparent|known|online|out|of|on|about|for|to|or|and)\b){0,4}\s*$"
 )
 _NEGATED = _rx(r"\b(?:not|never|don'?t|do not|stop|without|avoid|no)\s+(?:\w+\s+){0,1}$")
 _GUARD_LOOKBACK = 60
@@ -157,7 +170,15 @@ def _protective_context(sample: str, start: int, end: int) -> bool:
                      sample.rfind("?", 0, start), sample.rfind("!", 0, start)) + 1
     lo = max(line_start, start - _GUARD_LOOKBACK)
     for found in _PROTECTIVE.finditer(sample, lo, end):
-        if _NEGATED.search(sample, max(lo, found.start() - 30), found.start()):
+        if found.start() >= start:
+            # Protective words inside the match do not govern it.
+            break
+        if found.end() <= start and not _FILLER_GAP.match(sample[found.end() : start]):
+            continue
+        before = sample[max(lo, found.start() - 30) : found.start()]
+        if _NEGATED.search(before):
+            continue
+        if _NOUN_CAPABLE.match(found.group(0)) and _DETERMINER_BEFORE.search(before):
             continue
         return True
     return False
@@ -432,6 +453,9 @@ class SafetyRecord:
 _MAX_PENDING = 1000
 
 
+_RETRYABLE_4XX = frozenset({401, 403, 404, 408, 409, 425, 429})
+
+
 @dataclass
 class SafetyRecorder:
     """Sends flagged records to the control plane.
@@ -446,11 +470,14 @@ class SafetyRecorder:
     send_timeout_s: float = 2.0
     max_pending: int = _MAX_PENDING
     dropped: int = 0
+    rejected: int = 0
 
     async def record(self, control_plane: Any, record: SafetyRecord) -> bool:
-        if await self._send(control_plane, record):
+        result = await self._send(control_plane, record)
+        if result == "sent":
             return True
-        self._enqueue(record)
+        if result == "retry":
+            self._enqueue(record)
         return False
 
     def _enqueue(self, record: SafetyRecord) -> None:
@@ -471,28 +498,47 @@ class SafetyRecorder:
         sent = 0
         for _ in range(len(self.pending)):
             record = self.pending.popleft()
-            if await self._send(control_plane, record):
+            result = await self._send(control_plane, record)
+            if result == "sent":
                 sent += 1
-            else:
-                self.pending.append(record)
+            elif result == "retry":
+                self.pending.appendleft(record)
                 break
+            # "rejected": dropped and logged in _send; keep flushing.
         return sent
 
-    async def _send(self, control_plane: Any, record: SafetyRecord) -> bool:
+    async def _send(
+        self, control_plane: Any, record: SafetyRecord
+    ) -> Literal["sent", "retry", "rejected"]:
         post = getattr(control_plane, "post_safety_flag", None)
         if post is None:
-            return False
+            return "retry"
         try:
             await asyncio.wait_for(post(record), timeout=self.send_timeout_s)
-            return True
+            return "sent"
         except Exception as exc:  # noqa: BLE001 - logged without text
+            code = getattr(getattr(exc, "response", None), "status_code", None)
+            if isinstance(code, int) and 400 <= code < 500 and code not in _RETRYABLE_4XX:
+                # The control plane will never accept this record (for example
+                # a field over its limit). Retrying it would block every
+                # record queued behind it.
+                self.rejected += 1
+                logger.error(
+                    "safety record rejected by control plane id=%s category=%s status=%d "
+                    "rejected_total=%d",
+                    record.id,
+                    record.category,
+                    code,
+                    self.rejected,
+                )
+                return "rejected"
             logger.warning(
                 "safety record send failed id=%s category=%s error=%s",
                 record.id,
                 record.category,
                 type(exc).__name__,
             )
-            return False
+            return "retry"
 
 
 @dataclass(frozen=True)
