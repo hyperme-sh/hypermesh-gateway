@@ -245,10 +245,88 @@ async def test_failure_fails_open_by_default(
     lease_id = uuid.uuid4()
     app.state.ticket_cache.put(tenant_id, _signed_ticket(lease_id))
     calls = _counting_runtime(app)
-    response = await _post(http_client, tenant_headers, lease_id, CSAM)
+    response = await _post(http_client, tenant_headers, lease_id, SELF_HARM)
     assert response.status_code == 200
     assert calls == [1]
     assert control_plane.safety_flags == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("classifier", [_Broken(), _Slow()])
+async def test_failure_still_blocks_csam_inline(
+    http_client, tenant_headers, app, tenant_id, control_plane, monkeypatch, classifier
+):
+    monkeypatch.setenv("HYPERMESH_SAFETY_TIMEOUT_MS", "50")
+    app.state.safety_classifier = classifier
+    lease_id = uuid.uuid4()
+    app.state.ticket_cache.put(tenant_id, _signed_ticket(lease_id))
+    calls = _counting_runtime(app)
+    # Protective wording is not honoured on this path.
+    for text in (CSAM, "How do I report CSAM to NCMEC?"):
+        response = await _post(http_client, tenant_headers, lease_id, text)
+        assert response.status_code == 400
+    assert calls == []
+    assert [r.rule_id for r in control_plane.safety_flags] == ["csam.fallback"] * 2
+    assert all(r.action == "block" for r in control_plane.safety_flags)
+
+
+@pytest.mark.asyncio
+async def test_pool_bounds_overrunning_classifiers():
+    import threading
+
+    from hypermesh_gateway_service.safety import ScreenBusy, ScreenPool
+
+    release = threading.Event()
+    running = []
+
+    def hang():
+        running.append(threading.current_thread().name)
+        release.wait(5)
+        return []
+
+    pool = ScreenPool(workers=2)
+    for _ in range(2):
+        with pytest.raises(TimeoutError):
+            await pool.run(hang, timeout=0.05)
+    # Both workers are still busy with overrun work: no third thread starts.
+    with pytest.raises(ScreenBusy):
+        await pool.run(lambda: [], timeout=1)
+    assert len(running) == 2
+    release.set()
+    for _ in range(50):
+        try:
+            assert await pool.run(lambda: [], timeout=1) == []
+            break
+        except ScreenBusy:
+            await asyncio.sleep(0.02)
+    else:
+        pytest.fail("slots were not released after the overrun work finished")
+
+
+@pytest.mark.asyncio
+async def test_busy_pool_falls_back_to_inline_csam_check():
+    import threading
+
+    from hypermesh_gateway_service.safety import ScreenPool, screen_request
+
+    release = threading.Event()
+
+    class _Hang:
+        version = "hang-v0"
+
+        def screen(self, text):
+            release.wait(5)
+            return None
+
+    pool = ScreenPool(workers=1)
+    try:
+        first = await screen_request(_Hang(), BENIGN, lease_id=uuid.uuid4(), pool=pool)
+        assert first.failed and first.action == "allow"
+        busy = await screen_request(_Hang(), CSAM, lease_id=uuid.uuid4(), pool=pool)
+        assert busy.flag is not None and busy.flag.rule_id == "csam.fallback"
+        assert busy.action == "block"
+    finally:
+        release.set()
 
 
 @pytest.mark.asyncio

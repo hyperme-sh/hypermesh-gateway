@@ -40,7 +40,10 @@ import codecs
 import logging
 import os
 import re
+import threading
 import uuid
+from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import unquote_to_bytes
 from collections import deque
 from dataclasses import dataclass, field
@@ -843,21 +846,108 @@ def strictest(flags: list[SafetyFlag]) -> tuple[SafetyFlag, Action] | None:
     return flags[0], "allow"
 
 
+WORKERS_ENV = "HYPERMESH_SAFETY_WORKERS"
+DEFAULT_WORKERS = 4
+FALLBACK_RULE_ID = "csam.fallback"
+
+
+class ScreenBusy(RuntimeError):
+    """Every screening worker is still running earlier (overrun) work."""
+
+
+class ScreenPool:
+    """Bounded classifier execution.
+
+    A dedicated pool of ``HYPERMESH_SAFETY_WORKERS`` threads (default 4), never
+    the shared default executor. A slot is taken before work is submitted and
+    released only when the work really finishes, so a classifier that overruns
+    its budget keeps holding its slot: overruns are capped at the pool size
+    and cannot starve anything else. When no slot is free the screen fails at
+    once (``ScreenBusy``) instead of queueing. Python threads cannot be killed;
+    the hard timeout stops waiting, and the slot accounting bounds the cost.
+    """
+
+    def __init__(self, workers: int | None = None) -> None:
+        size = workers if workers is not None else _workers()
+        self.size = max(size, 1)
+        self._slots = threading.BoundedSemaphore(self.size)
+        self._executor = ThreadPoolExecutor(
+            max_workers=self.size, thread_name_prefix="safety-screen"
+        )
+
+    async def run(self, fn: Callable[[], list[SafetyFlag]], timeout: float) -> list[SafetyFlag]:
+        if not self._slots.acquire(blocking=False):
+            raise ScreenBusy("all screening workers busy")
+        try:
+            future = self._executor.submit(fn)
+        except BaseException:
+            self._slots.release()
+            raise
+        future.add_done_callback(lambda _: self._slots.release())
+        return await asyncio.wait_for(asyncio.wrap_future(future), timeout=timeout)
+
+
+def _workers() -> int:
+    raw = (os.environ.get(WORKERS_ENV) or "").strip()
+    try:
+        return int(raw) if raw else DEFAULT_WORKERS
+    except ValueError:
+        return DEFAULT_WORKERS
+
+
+_POOL: ScreenPool | None = None
+_POOL_LOCK = threading.Lock()
+
+
+def screen_pool() -> ScreenPool:
+    global _POOL
+    with _POOL_LOCK:
+        if _POOL is None:
+            _POOL = ScreenPool()
+        return _POOL
+
+
+def csam_fallback(text: str) -> SafetyFlag | None:
+    """CSAM patterns run inline when the classifier cannot finish.
+
+    No protective wording is honoured here: when screening failed, a CSAM
+    pattern match is blocked and recorded.
+    """
+
+    for pattern in (_CSAM_NAMED, _CSAM_MINOR_SEXUAL):
+        match = pattern.search(text)
+        if match is not None:
+            return SafetyFlag(CATEGORY_CSAM, FALLBACK_RULE_ID, RULES_VERSION, match.start())
+    start = _straddling_csam(text)
+    if start is not None:
+        return SafetyFlag(CATEGORY_CSAM, FALLBACK_RULE_ID, RULES_VERSION, start)
+    return None
+
+
 async def screen_request(
-    classifier: SafetyClassifier, text: str, *, lease_id: uuid.UUID
+    classifier: SafetyClassifier,
+    text: str,
+    *,
+    lease_id: uuid.UUID,
+    pool: ScreenPool | None = None,
 ) -> ScreenOutcome:
-    """Screen within the time budget. Failure follows HYPERMESH_SAFETY_FAIL_MODE."""
+    """Screen within the time budget on the bounded pool.
+
+    When the classifier errors, overruns its budget or finds every worker
+    busy, the CSAM patterns still run inline: a match is blocked and recorded
+    whatever the fail mode. Otherwise HYPERMESH_SAFETY_FAIL_MODE applies
+    (open serves unscreened, closed refuses with 503).
+    """
 
     size = len(text)
     if size > max_screen_chars():
         logger.warning("safety screening refused oversized request lease=%s chars=%d", lease_id, size)
         return ScreenOutcome(flag=None, action="block", too_large=True)
     try:
-        flags = await asyncio.wait_for(
-            asyncio.to_thread(_classify, classifier, text),
-            timeout=screening_timeout_s(size),
+        flags = await (pool or screen_pool()).run(
+            lambda: _classify(classifier, text), timeout=screening_timeout_s(size)
         )
-    except Exception as exc:  # noqa: BLE001 - includes TimeoutError
+    except Exception as exc:  # noqa: BLE001 - includes TimeoutError and ScreenBusy
         closed = fail_closed()
         logger.error(
             "safety screening failed lease=%s version=%s error=%s fail_mode=%s",
@@ -866,6 +956,9 @@ async def screen_request(
             type(exc).__name__,
             "closed" if closed else "open",
         )
+        fallback = csam_fallback(text)
+        if fallback is not None:
+            return ScreenOutcome(flag=fallback, action="block")
         return ScreenOutcome(flag=None, action="block" if closed else "allow", failed=True)
     chosen = strictest(flags)
     if chosen is None:
