@@ -1521,3 +1521,19 @@ async def test_in_flight_retry_keeps_its_tenant_capacity_reserved():
     assert await flush == 0
     assert list(recorder.pending) == [second, third]
     assert recorder.dropped == 1
+
+
+async def test_flush_limits_recovered_backlog_per_assignment_refresh():
+    from hypermesh_gateway_service.safety import SafetyRecord, SafetyRecorder
+    recorder = SafetyRecorder()
+    tenant, lease = uuid.uuid4(), uuid.uuid4()
+    for _ in range(20):
+        recorder._enqueue(SafetyRecord(id=uuid.uuid4(), tenant_id=tenant,
+            lease_id=lease, subject="person", door="chat", category="self_harm",
+            action="block", rule_id="rule", classifier_version="test",
+            flagged_text="evidence", occurred_at=datetime.now(UTC)))
+    class Recovered:
+        async def post_safety_flag(self, record):
+            return None
+    assert await recorder.flush(Recovered()) == 8
+    assert len(recorder.pending) == 12

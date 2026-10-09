@@ -790,20 +790,22 @@ class SafetyRecorder:
 
     async def flush(self, control_plane: Any) -> int:
         sent = 0
-        for record in list(self.pending):
-            if record not in self.pending:
-                continue
-            # Keep its slot reserved while delivery is in flight. Admission
-            # can explicitly evict the same tenant's record, but a failed send
-            # must never silently restore an already-counted eviction.
-            result = await self._send(control_plane, record)
-            if result == "retry":
-                break
-            if record in self.pending:
-                self.pending.remove(record)
-            if result == "sent":
-                sent += 1
-            # "rejected": dropped and logged in _send; keep flushing.
+        # Assignment refresh must regain control promptly even after an outage.
+        # A timed-out send retains its existing queue slot for a later cycle.
+        try:
+            async with asyncio.timeout(4):
+                for record in list(self.pending)[:8]:
+                    if record not in self.pending:
+                        continue
+                    result = await self._send(control_plane, record)
+                    if result == "retry":
+                        break
+                    if record in self.pending:
+                        self.pending.remove(record)
+                    if result == "sent":
+                        sent += 1
+        except TimeoutError:
+            pass
         return sent
 
     async def _send(
