@@ -20,7 +20,11 @@ Settings (environment):
 - ``HYPERMESH_SAFETY_ACTION_SELF_HARM``, ``..._MALWARE_INTRUSION``,
   ``..._VIOLENT_EXTREMISM``: ``allow`` (default) or ``block``. Both record.
   Child sexual abuse material is always ``block``; it cannot be set to allow.
-- ``HYPERMESH_SAFETY_TIMEOUT_MS``: classifier time budget, default 250.
+- ``HYPERMESH_SAFETY_TIMEOUT_MS``: base classifier time budget, default 250,
+  plus 2 seconds per million characters screened.
+- ``HYPERMESH_SAFETY_MAX_CHARS``: longest screened text accepted, default
+  1,048,576 characters. A longer request is refused with 413; it is never
+  partly screened.
 - ``HYPERMESH_SAFETY_FAIL_MODE``: what happens when the classifier errors or
   runs past its budget. ``open`` (default) serves the request unscreened
   and logs the failure without text; ``closed`` refuses the request with
@@ -67,15 +71,20 @@ ACTION_ENV_PREFIX = "HYPERMESH_SAFETY_ACTION_"
 TIMEOUT_ENV = "HYPERMESH_SAFETY_TIMEOUT_MS"
 FAIL_MODE_ENV = "HYPERMESH_SAFETY_FAIL_MODE"
 DEFAULT_TIMEOUT_MS = 250
-# Text past this many characters is screened as head plus tail, so a huge
-# body cannot stretch classification without bound.
-MAX_SCREEN_CHARS = 262_144
+# Every forwarded character is screened. A request whose screened text is
+# longer than this is refused (413) rather than partly screened.
+MAX_SCREEN_CHARS_ENV = "HYPERMESH_SAFETY_MAX_CHARS"
+MAX_SCREEN_CHARS = 1_048_576
+# The time budget grows with the text: base budget plus this per million chars.
+TIMEOUT_PER_MCHAR_S = 2.0
 # The stored excerpt is capped; the window is centered on the match.
 MAX_RECORD_CHARS = 16_384
 
 BLOCKED_MESSAGE = "This request was blocked by automated safety screening."
 BLOCKED_CODE = "content_policy_violation"
 UNAVAILABLE_MESSAGE = "Automated safety screening is unavailable; retry shortly."
+TOO_LARGE_MESSAGE = "This request is too large for automated safety screening."
+TOO_LARGE_CODE = "request_too_large"
 
 
 @dataclass(frozen=True)
@@ -97,6 +106,9 @@ class SafetyClassifier(Protocol):
     def version(self) -> str: ...
 
     def screen(self, text: str) -> SafetyFlag | None: ...
+
+    # Optional: ``screen_all(text) -> list[SafetyFlag]`` returns every matched
+    # category so the strictest configured action applies.
 
 
 @dataclass(frozen=True)
@@ -227,7 +239,7 @@ RULES_VERSION = "safety-rules-v1"
 
 
 class RulesSafetyClassifier:
-    """Deterministic baseline. First matching rule wins, CSAM rules first."""
+    """Deterministic baseline. Reports the first match of every category."""
 
     def __init__(self, rules: tuple[_Rule, ...] = _RULES, version: str = RULES_VERSION) -> None:
         self._rules = rules
@@ -238,39 +250,42 @@ class RulesSafetyClassifier:
         return self._version
 
     def screen(self, text: str) -> SafetyFlag | None:
+        found = self.screen_all(text)
+        return found[0] if found else None
+
+    def screen_all(self, text: str) -> list[SafetyFlag]:
+        """One flag per matched category, in rule order (CSAM first)."""
+
+        flags: list[SafetyFlag] = []
         if not text:
-            return None
-        sample = bounded_sample(text)
+            return flags
+        seen: set[str] = set()
         for rule in self._rules:
-            for match in rule.pattern.finditer(sample):
-                if rule.guarded and _protective_context(sample, match.start(), match.end()):
+            if rule.category in seen:
+                continue
+            for match in rule.pattern.finditer(text):
+                if rule.guarded and _protective_context(text, match.start(), match.end()):
                     continue
-                return SafetyFlag(
-                    category=rule.category,
-                    rule_id=rule.rule_id,
-                    classifier_version=self._version,
-                    match_start=_original_offset(text, match.start()),
+                flags.append(
+                    SafetyFlag(
+                        category=rule.category,
+                        rule_id=rule.rule_id,
+                        classifier_version=self._version,
+                        match_start=match.start(),
+                    )
                 )
-        return None
+                seen.add(rule.category)
+                break
+        return flags
 
 
-def bounded_sample(text: str) -> str:
-    """Whitespace-collapsed text, capped to head plus tail."""
-
-    if len(text) > MAX_SCREEN_CHARS:
-        head = MAX_SCREEN_CHARS * 3 // 4
-        tail = MAX_SCREEN_CHARS - head
-        text = text[:head] + "\n" + text[-tail:]
-    return text
-
-
-def _original_offset(text: str, offset: int) -> int:
-    if len(text) <= MAX_SCREEN_CHARS:
-        return offset
-    head = MAX_SCREEN_CHARS * 3 // 4
-    if offset <= head:
-        return offset
-    return len(text) - (MAX_SCREEN_CHARS - head) + (offset - head - 1)
+def max_screen_chars() -> int:
+    raw = (os.environ.get(MAX_SCREEN_CHARS_ENV) or "").strip()
+    try:
+        value = int(raw) if raw else MAX_SCREEN_CHARS
+    except ValueError:
+        value = MAX_SCREEN_CHARS
+    return max(value, 1)
 
 
 def record_excerpt(text: str, match_start: int) -> str:
@@ -297,13 +312,15 @@ def category_action(category: str) -> Action:
     return default
 
 
-def screening_timeout_s() -> float:
+def screening_timeout_s(chars: int = 0) -> float:
+    """Base budget (HYPERMESH_SAFETY_TIMEOUT_MS) plus time proportional to size."""
+
     raw = (os.environ.get(TIMEOUT_ENV) or "").strip()
     try:
         value = int(raw) if raw else DEFAULT_TIMEOUT_MS
     except ValueError:
         value = DEFAULT_TIMEOUT_MS
-    return max(value, 1) / 1000.0
+    return max(value, 1) / 1000.0 + TIMEOUT_PER_MCHAR_S * chars / 1_000_000
 
 
 def fail_closed() -> bool:
@@ -313,46 +330,66 @@ def fail_closed() -> bool:
 _STRUCTURAL_KEYS = frozenset({"role", "type", "id", "tool_call_id", "model", "lease_id"})
 _MEDIA_KEYS = frozenset({"url", "image_url", "data", "file_data"})
 _DATA_URL = re.compile(r"data:[\w.+-]+/[\w.+-]+(?:;[\w-]+=[\w.-]+)*;base64,[A-Za-z0-9+/=\s]*$")
-_MAX_DEPTH = 32
+_WHITESPACE = re.compile(r"\s+")
+
+
+def _strings(value: Any) -> list[str]:
+    """Every screenable string below value, depth first, with no depth limit."""
+
+    out: list[str] = []
+    stack: list[tuple[Any, str | None]] = [(value, None)]
+    while stack:
+        item, key = stack.pop()
+        if isinstance(item, str):
+            if not item:
+                continue
+            # Only a media payload field may carry a data URL; text fields are
+            # screened whatever their prefix.
+            if key in _MEDIA_KEYS and _DATA_URL.match(item):
+                continue
+            out.append(item)
+        elif isinstance(item, dict):
+            children = [
+                (child, str(child_key))
+                for child_key, child in item.items()
+                if not (child_key in _STRUCTURAL_KEYS and isinstance(child, str))
+            ]
+            stack.extend(reversed(children))
+        elif isinstance(item, list):
+            stack.extend((child, key) for child in reversed(item))
+    return out
+
+
+def _segment(strings: list[str]) -> str:
+    # One segment is one line: whitespace inside it collapses to single spaces,
+    # so a phrase split across lines or content parts is still matched.
+    return _WHITESPACE.sub(" ", " ".join(strings)).strip()
 
 
 def screened_text(payload: dict[str, Any] | list[Any] | None) -> str:
-    """Every string forwarded to the host, messages first. Caller must not log it.
+    """Every string forwarded to the host, one line per message. Caller must not log it.
 
     Walks the whole request body (message content, tool-call arguments, tool
     definitions and any extra field) so nothing reaches the host unscreened.
+    Each message becomes one line (its content parts and tool calls joined
+    with spaces); each other top-level field becomes its own line. Rules do
+    not match across lines, so one message cannot change how another is read.
     Structural keys (role, type, ids, model, lease_id) are skipped, and so is a
     base64 data URL in a media field (url, image_url, data, file_data).
     """
 
-    parts: list[str] = []
-
-    def walk(value: Any, depth: int, key: str | None = None) -> None:
-        if depth > _MAX_DEPTH:
-            return
-        if isinstance(value, str):
-            if not value:
-                return
-            # Only a media payload field may carry a data URL; text fields are
-            # screened whatever their prefix.
-            if key in _MEDIA_KEYS and _DATA_URL.match(value):
-                return
-            parts.append(value)
-        elif isinstance(value, dict):
-            for child_key, item in value.items():
-                if child_key in _STRUCTURAL_KEYS and isinstance(item, str):
-                    continue
-                walk(item, depth + 1, str(child_key))
-        elif isinstance(value, list):
-            for item in value:
-                walk(item, depth + 1, key)
-
+    lines: list[str] = []
     if isinstance(payload, dict):
-        walk(payload.get("messages"), 0)
-        walk({k: v for k, v in payload.items() if k != "messages"}, 0)
+        messages = payload.get("messages")
+        for message in messages if isinstance(messages, list) else [messages]:
+            lines.append(_segment(_strings(message)))
+        for key, value in payload.items():
+            if key == "messages" or (key in _STRUCTURAL_KEYS and isinstance(value, str)):
+                continue
+            lines.append(_segment(_strings(value)))
     else:
-        walk(payload, 0)
-    return "\n".join(parts)
+        lines.append(_segment(_strings(payload)))
+    return "\n".join(line for line in lines if line)
 
 
 @dataclass(frozen=True)
@@ -463,6 +500,26 @@ class ScreenOutcome:
     flag: SafetyFlag | None
     action: Action
     failed: bool = False
+    too_large: bool = False
+
+
+def _classify(classifier: SafetyClassifier, text: str) -> list[SafetyFlag]:
+    screen_all = getattr(classifier, "screen_all", None)
+    if screen_all is not None:
+        return list(screen_all(text))
+    flag = classifier.screen(text)
+    return [flag] if flag is not None else []
+
+
+def strictest(flags: list[SafetyFlag]) -> tuple[SafetyFlag, Action] | None:
+    """A blocking flag when any matched category blocks, else the first flag."""
+
+    if not flags:
+        return None
+    for flag in flags:
+        if category_action(flag.category) == "block":
+            return flag, "block"
+    return flags[0], "allow"
 
 
 async def screen_request(
@@ -470,9 +527,14 @@ async def screen_request(
 ) -> ScreenOutcome:
     """Screen within the time budget. Failure follows HYPERMESH_SAFETY_FAIL_MODE."""
 
+    size = len(text)
+    if size > max_screen_chars():
+        logger.warning("safety screening refused oversized request lease=%s chars=%d", lease_id, size)
+        return ScreenOutcome(flag=None, action="block", too_large=True)
     try:
-        flag = await asyncio.wait_for(
-            asyncio.to_thread(classifier.screen, text), timeout=screening_timeout_s()
+        flags = await asyncio.wait_for(
+            asyncio.to_thread(_classify, classifier, text),
+            timeout=screening_timeout_s(size),
         )
     except Exception as exc:  # noqa: BLE001 - includes TimeoutError
         closed = fail_closed()
@@ -484,9 +546,10 @@ async def screen_request(
             "closed" if closed else "open",
         )
         return ScreenOutcome(flag=None, action="block" if closed else "allow", failed=True)
-    if flag is None:
+    chosen = strictest(flags)
+    if chosen is None:
         return ScreenOutcome(flag=None, action="allow")
-    return ScreenOutcome(flag=flag, action=category_action(flag.category))
+    return ScreenOutcome(flag=chosen[0], action=chosen[1])
 
 
 def resolve_safety_classifier() -> SafetyClassifier:

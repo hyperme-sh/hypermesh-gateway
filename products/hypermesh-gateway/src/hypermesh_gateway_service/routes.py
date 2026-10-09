@@ -56,6 +56,8 @@ from hypermesh_gateway_service.safety import (
     BLOCKED_CODE,
     BLOCKED_MESSAGE,
     UNAVAILABLE_MESSAGE,
+    TOO_LARGE_CODE,
+    TOO_LARGE_MESSAGE,
     SafetyRecord,
     SafetyRecorder,
     record_excerpt,
@@ -199,6 +201,8 @@ async def _screen(
         return
     classifier = _safety_classifier(request)
     outcome = await screen_request(classifier, text, lease_id=lease_id)
+    if outcome.too_large:
+        raise DoorError(413, TOO_LARGE_MESSAGE, TOO_LARGE_CODE)
     if outcome.failed:
         if outcome.action == "block":
             raise DoorError(503, UNAVAILABLE_MESSAGE, "safety_screening_unavailable")
