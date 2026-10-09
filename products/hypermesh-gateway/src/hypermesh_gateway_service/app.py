@@ -14,6 +14,7 @@ from controlplane_api.service_cors import add_optional_service_cors
 from controlplane_api.health import router as health_router
 from controlplane_api.version import router as version_router
 
+from hypermesh_gateway_service.body_limit import BodyLimitMiddleware
 from hypermesh_gateway_service.classify import Classifier, resolve_classifier
 from hypermesh_gateway_service.errors import INVALID_API_KEY_MESSAGE, DoorError, openai_error_body
 from hypermesh_gateway_service.control_plane import ControlPlane, resolve_control_plane
@@ -171,6 +172,8 @@ def create_app(
         return app.openapi_schema
 
     app.openapi = custom_openapi
+    # Outermost: refuse an oversized body before anything parses it.
+    app.add_middleware(BodyLimitMiddleware)
 
     app.include_router(health_router, prefix="/api/v1")
     app.include_router(version_router)
