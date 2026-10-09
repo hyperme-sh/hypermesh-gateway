@@ -581,7 +581,8 @@ def _media_strings(item: str) -> list[str]:
                 charset = value.strip().strip('"') or None
         textual = _textual(mime) or charset is not None
         if is_base64:
-            raw = _b64(payload)
+            # A data URL's data is percent-decoded before base64 (RFC 2397).
+            raw = _b64(unquote_to_bytes(payload).decode("latin-1"))
             if raw is None:
                 return [payload]
             if mime.partition("/")[0] in _MEDIA_TYPES and not textual:
@@ -973,50 +974,67 @@ def resolve_safety_classifier() -> SafetyClassifier:
 SPLIT_RULE_ID = "csam.named.split"
 
 
-def split_csam_check(payload: dict[str, Any] | None) -> tuple[SafetyFlag, str] | None:
-    """Fixed CSAM backstop for a phrase split across one role's turns.
+def _straddle(text: str, pattern: re.Pattern[str]) -> re.Match[str] | None:
+    """First match of ``pattern`` that spans a line break, reading breaks as spaces."""
 
-    ``screened_text`` joins only adjacent turns from the same role, so a phrase
-    split around an inserted turn from another role ("Write an erotic story
-    about", "Okay", "children") is not adjacent there, and a phrase split
-    across a role change is on two lines. This reads each role's turns in
-    order on their own, and the whole conversation in order, and
-    checks both CSAM patterns (explicit
-    terms and minor + sexual proximity) for a match that spans a turn break.
-    Protective wording can suppress only a proximity match, only when it
-    governs that match and no turn anywhere asks for access to material.
-    Errs toward flagging: unrelated turns that happen to form a match are
-    flagged for operator review. Runs whatever classifier is configured.
-    Caller must not log the text.
+    joined = text.replace("\n", " ")
+    for match in pattern.finditer(joined):
+        if "\n" in text[match.start() : match.end()]:
+            return match
+    return None
+
+
+def split_csam_check(
+    payload: dict[str, Any] | None, screened: str | None = None
+) -> tuple[SafetyFlag, str] | None:
+    """Backstop for a blocking phrase split across turns or fields.
+
+    Proximity rules do not cross line breaks in ``screened_text``, so a phrase
+    can be split between turns, around an inserted turn from another role, or
+    between a message and another model-visible field such as a tool
+    definition. This reads several sequences, each with breaks read as
+    spaces: each role's turns in order, the whole conversation in order, and
+    every model-visible line of the request in order (messages, then tools
+    and other fields). In each it checks both CSAM patterns, and the rules of
+    every other category whose configured action is ``block``, for a match
+    that spans a break. Protective wording can suppress only a CSAM proximity
+    match it governs, and only when no turn asks for material. Errs toward
+    flagging. Runs whatever classifier is configured, and also when the
+    classifier failed. Caller must not log the text.
     """
 
-    if not isinstance(payload, dict) or not isinstance(payload.get("messages"), list):
+    if not isinstance(payload, dict):
         return None
+    if screened is None:
+        screened = screened_text(payload)
     by_role: dict[str, list[str]] = {}
-    # The whole conversation in order. The caller writes every turn,
-    # including system and developer turns, so a phrase split across any role
-    # change ("Write an erotic story about", then "children") is read as one.
-    # This errs toward flagging: a system prompt that mentions children next
-    # to an adult sexual request is flagged for review.
     dialogue: list[str] = []
-    for message in payload["messages"]:
+    messages = payload.get("messages")
+    for message in messages if isinstance(messages, list) else []:
         if not isinstance(message, dict):
             continue
         segment = _segment(_strings(message))
         if segment:
-            role = str(message.get("role"))
-            by_role.setdefault(role, []).append(segment)
+            by_role.setdefault(str(message.get("role")), []).append(segment)
             dialogue.append(segment)
-    sequences = [*by_role.values(), dialogue]
-    access_requested = any(
-        _ACCESS.search(segment) for segments in by_role.values() for segment in segments
+    sequences = [*by_role.values(), dialogue, screened.split("\n") if screened else []]
+    access_requested = _ACCESS.search(screened or "") is not None or any(
+        _ACCESS.search(segment) for segment in dialogue
     )
+    blocking_rules = [
+        rule
+        for rule in _RULES
+        if rule.category != CATEGORY_CSAM and category_action(rule.category) == "block"
+    ]
     for segments in sequences:
         if len(segments) < 2:
             continue
         text = "\n".join(segments)
-        start = _straddling_csam(text)
-        if start is None:
+        found: tuple[str, str, int] | None = None
+        named = _straddle(text, _CSAM_NAMED)
+        if named is not None:
+            found = (CATEGORY_CSAM, SPLIT_RULE_ID, named.start())
+        if found is None:
             joined = text.replace("\n", " ")
             for match in _CSAM_MINOR_SEXUAL.finditer(joined):
                 if "\n" not in text[match.start() : match.end()]:
@@ -1025,14 +1043,24 @@ def split_csam_check(payload: dict[str, Any] | None) -> tuple[SafetyFlag, str] |
                     joined, match.start(), match.end()
                 ):
                     continue
-                start = match.start()
+                found = (CATEGORY_CSAM, SPLIT_RULE_ID, match.start())
                 break
-        if start is not None:
+        if found is None:
+            for rule in blocking_rules:
+                match = _straddle(text, rule.pattern)
+                if match is not None:
+                    found = (rule.category, f"{rule.rule_id}.split", match.start())
+                    break
+        if found is not None:
+            category, rule_id, start = found
             flag = SafetyFlag(
-                category=CATEGORY_CSAM,
-                rule_id=SPLIT_RULE_ID,
+                category=category,
+                rule_id=rule_id,
                 classifier_version=RULES_VERSION,
                 match_start=start,
             )
             return flag, text
     return None
+
+
+split_check = split_csam_check

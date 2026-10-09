@@ -55,7 +55,6 @@ from hypermesh_gateway_service.receipts import ReceiptStore
 from hypermesh_gateway_service.safety import (
     BLOCKED_CODE,
     BLOCKED_MESSAGE,
-    CATEGORY_CSAM,
     UNAVAILABLE_MESSAGE,
     TOO_LARGE_CODE,
     TOO_LARGE_MESSAGE,
@@ -214,18 +213,19 @@ async def _screen(
     outcome = await screen_request(classifier, text, lease_id=lease_id)
     if outcome.too_large:
         raise DoorError(413, TOO_LARGE_MESSAGE, TOO_LARGE_CODE)
-    if outcome.failed:
-        if outcome.action == "block":
-            raise DoorError(503, UNAVAILABLE_MESSAGE, "safety_screening_unavailable")
-        return
     flag = outcome.flag
     action = outcome.action
-    if flag is None or flag.category != CATEGORY_CSAM:
-        split = split_csam_check(payload)
+    if flag is None or action != "block":
+        # Split-phrase backstop for blocking categories. Runs on the failure
+        # path too, so a classifier failure never lets a split blocking
+        # phrase through.
+        split = split_csam_check(payload, text)
         if split is not None:
             flag, text = split
             action = "block"
     if flag is None:
+        if outcome.failed and outcome.action == "block":
+            raise DoorError(503, UNAVAILABLE_MESSAGE, "safety_screening_unavailable")
         return
     record = SafetyRecord(
         id=uuid.uuid4(),
