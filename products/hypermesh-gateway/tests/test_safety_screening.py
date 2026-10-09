@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import uuid
+from datetime import UTC, datetime
 
 import pytest
 
@@ -19,6 +20,7 @@ from hypermesh_gateway_service.safety import (
     RULES_VERSION,
     RulesSafetyClassifier,
     SafetyFlag,
+    SafetyRecord,
     SafetyRecorder,
     category_action,
     record_excerpt,
@@ -637,3 +639,21 @@ async def test_strictest_configured_action_wins_across_categories(
     assert [(r.category, r.action) for r in control_plane.safety_flags] == [
         (CATEGORY_VIOLENT_EXTREMISM, "block")
     ]
+
+
+def test_safety_record_repr_has_no_text():
+    record = SafetyRecord(
+        id=uuid.uuid4(),
+        tenant_id=uuid.uuid4(),
+        lease_id=uuid.uuid4(),
+        subject="pk_test",
+        category="self_harm",
+        action="allow",
+        rule_id="self_harm.intent",
+        classifier_version="safety-rules-v1",
+        door="chat",
+        flagged_text="secret prompt body",
+        occurred_at=datetime.now(UTC),
+    )
+    assert "secret prompt body" not in repr(record)
+    assert record.as_body()["flagged_text"] == "secret prompt body"

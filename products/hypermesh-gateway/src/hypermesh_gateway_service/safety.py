@@ -405,7 +405,7 @@ class SafetyRecord:
     rule_id: str
     classifier_version: str
     door: str
-    flagged_text: str
+    flagged_text: str = field(repr=False)
     occurred_at: datetime
 
     def as_body(self) -> dict[str, Any]:
