@@ -752,13 +752,15 @@ class SafetyRecorder:
 
     A record that cannot be sent waits in process memory (never on disk) and
     is retried by the refresh loop. At most ``max_pending`` records wait; past
-    that the oldest is evicted, counted in ``dropped`` and logged at error
-    level (id and category only). A restart drops records still waiting.
+    that an incoming tenant can replace only its own oldest record. Each tenant
+    has a separate cap; a full queue never evicts another tenant's evidence.
+    Drops are counted in ``dropped`` and logged (id and category only). A restart drops records still waiting.
     """
 
     pending: deque[SafetyRecord] = field(default_factory=deque)
     send_timeout_s: float = 2.0
     max_pending: int = _MAX_PENDING
+    max_pending_per_tenant: int = 100
     dropped: int = 0
     rejected: int = 0
 
@@ -771,17 +773,19 @@ class SafetyRecorder:
         return False
 
     def _enqueue(self, record: SafetyRecord) -> None:
-        """Keep the newest records. Every eviction is counted and logged."""
+        """Bound noisy tenants without erasing another tenant's evidence."""
 
-        while len(self.pending) >= self.max_pending:
-            lost = self.pending.popleft()
+        own = [item for item in self.pending if item.tenant_id == record.tenant_id]
+        if len(own) >= min(self.max_pending_per_tenant, self.max_pending) or len(self.pending) >= self.max_pending:
+            lost = own[0] if own else record
             self.dropped += 1
             logger.error(
                 "safety record dropped: pending queue full id=%s category=%s dropped_total=%d",
-                lost.id,
-                lost.category,
-                self.dropped,
+                lost.id, lost.category, self.dropped,
             )
+            if not own:
+                return
+            self.pending.remove(lost)
         self.pending.append(record)
 
     async def flush(self, control_plane: Any) -> int:

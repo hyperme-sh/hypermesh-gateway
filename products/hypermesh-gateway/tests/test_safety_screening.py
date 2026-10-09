@@ -632,7 +632,7 @@ def test_screened_text_skips_structure_and_data_urls():
 
 
 @pytest.mark.asyncio
-async def test_full_queue_evicts_oldest_and_counts_it(caplog):
+async def test_full_queue_preserves_other_tenants_and_counts_incoming_drop(caplog):
     from datetime import UTC, datetime
 
     from hypermesh_gateway_service.safety import SafetyRecord
@@ -662,9 +662,9 @@ async def test_full_queue_evicts_oldest_and_counts_it(caplog):
     ]
     for record in records:
         await recorder.record(_Down(), record)
-    assert [r.id for r in recorder.pending] == [records[1].id, records[2].id]
+    assert [r.id for r in recorder.pending] == [records[0].id, records[1].id]
     assert recorder.dropped == 1
-    assert str(records[0].id) in caplog.text
+    assert str(records[2].id) in caplog.text
     assert SELF_HARM not in caplog.text
 
 
@@ -1459,3 +1459,35 @@ async def test_category_set_to_block_still_blocks_when_the_classifier_fails(
     assert response.status_code == 400
     assert calls == []
     assert [r.rule_id for r in control_plane.safety_flags] == ["malware.build.fallback"]
+
+
+@pytest.mark.asyncio
+async def test_noisy_tenant_only_replaces_its_own_evidence_and_other_tenants_recover():
+    from datetime import UTC, datetime
+
+    from hypermesh_gateway_service.safety import SafetyRecord
+
+    recorder = SafetyRecorder(max_pending=6, max_pending_per_tenant=2)
+    victim, noisy = uuid.uuid4(), uuid.uuid4()
+    def record(tenant):
+        return SafetyRecord(id=uuid.uuid4(), tenant_id=tenant, lease_id=uuid.uuid4(),
+            subject="pk", category=CATEGORY_SELF_HARM, action="allow", rule_id="r",
+            classifier_version=RULES_VERSION, door="chat", flagged_text=SELF_HARM,
+            occurred_at=datetime.now(UTC))
+    evidence = record(victim)
+    recorder._enqueue(evidence)
+    for _ in range(50):
+        recorder._enqueue(record(noisy))
+    assert len(recorder.pending) == 3 and recorder.pending[0] == evidence
+    assert sum(item.tenant_id == noisy for item in recorder.pending) == 2
+    assert recorder.dropped == 48
+    # The noisy tenant cannot consume all global capacity during an outage.
+    newcomer = record(uuid.uuid4())
+    recorder._enqueue(newcomer)
+    delivered = []
+    class Recovered:
+        async def post_safety_flag(self, item):
+            delivered.append(item.id)
+    assert await recorder.flush(Recovered()) == 4
+    assert evidence.id in delivered and newcomer.id in delivered
+    assert not recorder.pending
