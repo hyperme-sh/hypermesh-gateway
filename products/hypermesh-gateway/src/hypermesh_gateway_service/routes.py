@@ -28,6 +28,7 @@ from hypermesh_gateway_service.errors import (
     LEASE_NOT_OWNED_MESSAGE,
     TENANT_MISMATCH_MESSAGE,
     DoorError,
+    instance_not_ready,
     model_not_found_message,
     no_active_lease_message,
 )
@@ -684,16 +685,17 @@ async def _chat(request: Request, body: ChatCompletionRequest) -> StreamingRespo
     cache = _tickets(request)
     cached = cache.get(tenant_id, lease_id)
     peer_key = cached.peer_public_key if cached else None
+    peer_up = _peer_is_up(request, peer_key)
     try:
         claims = require_chat_posture(
             cache,
             tenant_id,
             lease_id,
-            peer_up=_peer_is_up(request, peer_key),
+            peer_up=peer_up,
         )
         require_renter_chat_purpose(claims)
     except TicketNotReady as exc:
-        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+        raise instance_not_ready("peer_down" if not peer_up else "not_honored") from exc
     _bind_renter_to_ticket(request, grant, claims, tenant_id, cache)
     _require_door_capacity(request, lease_id)
     purpose = claims.purpose
@@ -891,16 +893,17 @@ async def _ir_chat(request: Request, body: ChatCompletionRequest):
     cache = _tickets(request)
     cached = cache.get(tenant_id, lease_id)
     peer_key = cached.peer_public_key if cached else None
+    peer_up = _peer_is_up(request, peer_key)
     try:
         claims = require_chat_posture(
             cache,
             tenant_id,
             lease_id,
-            peer_up=_peer_is_up(request, peer_key),
+            peer_up=peer_up,
         )
         require_ir_chat_purpose(claims)
     except TicketNotReady as exc:
-        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+        raise instance_not_ready("peer_down" if not peer_up else "not_honored") from exc
     _bind_auditor_to_ticket(request, grant, claims, tenant_id, cache)
     _require_door_capacity(request, lease_id)
     from hypermesh_gateway_service.classify import prompt_text_from_messages

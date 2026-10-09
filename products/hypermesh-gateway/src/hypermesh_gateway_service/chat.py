@@ -18,10 +18,12 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import httpx
-from fastapi import HTTPException
 from pydantic import BaseModel, Field
 
-from hypermesh_gateway_service.control_plane import INSTANCE_NOT_READY
+from hypermesh_gateway_service.control_plane import (
+    INSTANCE_NOT_READY,  # noqa: F401 (re-exported)
+)
+from hypermesh_gateway_service.errors import instance_not_ready
 
 logger = logging.getLogger(__name__)
 
@@ -120,7 +122,7 @@ async def proxy_chat(
     runtime_client: httpx.AsyncClient | None = None,
 ) -> ProxiedChat:
     if not client_address:
-        raise HTTPException(status_code=409, detail=INSTANCE_NOT_READY)
+        raise instance_not_ready("no_tunnel_address")
     url = f"http://{client_ip(client_address)}:{chat_upstream_port()}{CHAT_PATH}"
     logger.info("proxy chat lease_id=%s", lease_id)
     body = dict(payload)
@@ -137,13 +139,16 @@ async def proxy_chat(
         if owned is not None:
             await owned.aclose()
         logger.info("proxy chat upstream unreachable lease_id=%s", lease_id)
-        raise HTTPException(status_code=409, detail=INSTANCE_NOT_READY) from None
+        raise instance_not_ready("host_unreachable") from None
     if response.status_code >= 400:
+        upstream_status = response.status_code
         await response.aread()
         await response.aclose()
         if owned is not None:
             await owned.aclose()
-        raise HTTPException(status_code=409, detail=INSTANCE_NOT_READY)
+        # llama-server answers 503 while it is still loading the model.
+        logger.info("proxy chat upstream status=%s lease_id=%s", upstream_status, lease_id)
+        raise instance_not_ready(f"host_status_{upstream_status}")
     return ProxiedChat(response=response, _owned_client=owned)
 
 

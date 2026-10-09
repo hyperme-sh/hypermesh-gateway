@@ -73,8 +73,21 @@ OpenAI error shape is only on `/v1/*`. Sibling `/api/v1/hypermesh-gateway/...` k
 | 403 | `tenant_mismatch` | `X-Tenant-ID` does not match the key |
 | 403 | `lease_not_owned` | `lease_id` is not in that tenant's cache and is not one of its revoked leases |
 | 404 | `model_not_found` | `model` is set and no honoring lease has that catalog id |
-| 409 | (detail) instance not ready | Ticket will not honor, including a lease id this tenant has revoked, or the host is down |
+| 409 | `instance_not_ready` | Ticket will not honor, including a lease id this tenant has revoked, or the host is down or still loading. See below. |
 | 429 | (detail) | Quota or the usage queue is full |
+
+`instance_not_ready` on `/v1/*` keeps the legacy `detail: "instance not ready"` and adds `error.reason` (also sent as `X-Hypermesh-Not-Ready`) and `error.retryable`. Reasons:
+
+| reason | retryable | When |
+|--------|-----------|------|
+| `peer_down` | yes, `Retry-After: 5` | The host WireGuard peer has not handshaked recently |
+| `host_unreachable` | yes, `Retry-After: 5` | Nothing answers on the host chat port yet, for example the container is starting |
+| `host_status_5xx` | yes, `Retry-After: 5` | The host answered 5xx. llama-server answers 503 while it loads the model after `lease_start`. |
+| `host_status_4xx` | no | The host refused the request |
+| `not_honored` | no | The ticket is revoked, expired, not certified green, or for another purpose |
+| `no_tunnel_address` | no | The ticket has no client address |
+
+A lease is `active` once the host has started the container, which can be before the model has loaded. A client should retry a retryable `instance_not_ready` after `Retry-After`.
 
 `DELETE /api/v1/api-keys/{id}` unpublishes the fingerprint before it marks the key revoked (`POST /api/v1/hypermesh/internal/renter-key-fingerprints/revoke`, and the IR twin). If that unpublish fails, the delete returns 502 and the key stays active. On test and prod the door requires api-keys-service `POST /api/v1/internal/validate` (`HYPERMESH_REQUIRE_KEY_VALIDATE`, default on outside local/dev). A positive result is remembered for at most 60s, and a pull that lists the fingerprint in `revoked_key_fingerprints` drops it. A revoked key stops working within 60 seconds.
 

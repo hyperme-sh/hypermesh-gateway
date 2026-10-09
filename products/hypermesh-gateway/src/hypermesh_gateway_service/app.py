@@ -15,7 +15,14 @@ from controlplane_api.health import router as health_router
 from controlplane_api.version import router as version_router
 
 from hypermesh_gateway_service.classify import Classifier, resolve_classifier
-from hypermesh_gateway_service.errors import INVALID_API_KEY_MESSAGE, DoorError, openai_error_body
+from hypermesh_gateway_service.errors import (
+    INSTANCE_NOT_READY,
+    INVALID_API_KEY_MESSAGE,
+    NOT_READY_REASON_HEADER,
+    DoorError,
+    instance_not_ready_body,
+    openai_error_body,
+)
 from hypermesh_gateway_service.control_plane import ControlPlane, resolve_control_plane
 from hypermesh_gateway_service.inbox import ApprovalInbox, resolve_approval_inbox
 from hypermesh_gateway_service.metrics import MeterQueue, resolve_meter_queue
@@ -123,6 +130,17 @@ def create_app(
             return JSONResponse(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 content=openai_error_body(INVALID_API_KEY_MESSAGE, "invalid_api_key"),
+            )
+        if (
+            request.url.path.startswith("/v1/")
+            and exc.status_code == status.HTTP_409_CONFLICT
+            and exc.detail == INSTANCE_NOT_READY
+        ):
+            headers = dict(exc.headers or {})
+            return JSONResponse(
+                status_code=exc.status_code,
+                content=instance_not_ready_body(headers.get(NOT_READY_REASON_HEADER)),
+                headers=headers,
             )
         return JSONResponse(
             status_code=exc.status_code,

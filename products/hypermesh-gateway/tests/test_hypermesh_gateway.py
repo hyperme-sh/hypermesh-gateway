@@ -552,6 +552,126 @@ async def test_peer_down_cannot_keep_session(http_client, tenant_headers, app, t
     assert refused.json()["detail"] == INSTANCE_NOT_READY
 
 
+def _runtime_answering(app, handler) -> None:
+    import httpx
+
+    app.state.runtime_client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+
+
+def _not_ready(response) -> dict:
+    assert response.status_code == 409
+    body = response.json()
+    assert body["detail"] == INSTANCE_NOT_READY
+    assert body["error"]["code"] == "instance_not_ready"
+    assert body["error"]["message"] == INSTANCE_NOT_READY
+    assert response.headers["x-hypermesh-not-ready"] == body["error"]["reason"]
+    return body["error"]
+
+
+@pytest.mark.asyncio
+async def test_peer_down_is_retryable_instance_not_ready(http_client, tenant_headers, app, tenant_id):
+    lease_id = uuid.uuid4()
+    app.state.ticket_cache.put(tenant_id, _signed_ticket(lease_id))
+    app.state.peer_up = False
+    _mock_runtime(app)
+    refused = await http_client.post(
+        "/v1/chat/completions",
+        headers=_renter(tenant_headers),
+        json={"lease_id": str(lease_id), "messages": [{"role": "user", "content": "hi"}]},
+    )
+    error = _not_ready(refused)
+    assert error["reason"] == "peer_down"
+    assert error["retryable"] is True
+    assert refused.headers["retry-after"] == "5"
+
+
+@pytest.mark.asyncio
+async def test_host_still_loading_is_retryable_instance_not_ready(
+    http_client, tenant_headers, app, tenant_id
+):
+    import httpx
+
+    lease_id = uuid.uuid4()
+    app.state.ticket_cache.put(tenant_id, _signed_ticket(lease_id))
+
+    async def loading(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            503,
+            json={"error": {"code": 503, "message": "Loading model", "type": "unavailable_error"}},
+        )
+
+    _runtime_answering(app, loading)
+    refused = await http_client.post(
+        "/v1/chat/completions",
+        headers=_renter(tenant_headers),
+        json={"lease_id": str(lease_id), "messages": [{"role": "user", "content": "hi"}]},
+    )
+    error = _not_ready(refused)
+    assert error["reason"] == "host_status_503"
+    assert error["retryable"] is True
+    assert refused.headers["retry-after"] == "5"
+    assert "Loading model" not in refused.text
+
+
+@pytest.mark.asyncio
+async def test_host_port_closed_is_retryable_instance_not_ready(
+    http_client, tenant_headers, app, tenant_id
+):
+    import httpx
+
+    lease_id = uuid.uuid4()
+    app.state.ticket_cache.put(tenant_id, _signed_ticket(lease_id))
+
+    async def refused_connect(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("connection refused", request=request)
+
+    _runtime_answering(app, refused_connect)
+    refused = await http_client.post(
+        "/v1/chat/completions",
+        headers=_renter(tenant_headers),
+        json={"lease_id": str(lease_id), "messages": [{"role": "user", "content": "hi"}]},
+    )
+    error = _not_ready(refused)
+    assert error["reason"] == "host_unreachable"
+    assert error["retryable"] is True
+
+
+@pytest.mark.asyncio
+async def test_host_4xx_and_unhonored_ticket_are_not_retryable(
+    http_client, tenant_headers, app, tenant_id
+):
+    import httpx
+
+    lease_id = uuid.uuid4()
+    app.state.ticket_cache.put(tenant_id, _signed_ticket(lease_id))
+
+    async def bad_request(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(400, json={"error": {"message": "bad tools"}})
+
+    _runtime_answering(app, bad_request)
+    refused = await http_client.post(
+        "/v1/chat/completions",
+        headers=_renter(tenant_headers),
+        json={"lease_id": str(lease_id), "messages": [{"role": "user", "content": "hi"}]},
+    )
+    error = _not_ready(refused)
+    assert error["reason"] == "host_status_400"
+    assert error["retryable"] is False
+    assert "retry-after" not in refused.headers
+
+    suspended = uuid.uuid4()
+    app.state.ticket_cache.put(tenant_id, _signed_ticket(suspended, path_b_state="suspended"))
+    refused = await http_client.post(
+        "/v1/chat/completions",
+        headers=_renter(tenant_headers),
+        json={"lease_id": str(suspended), "messages": [{"role": "user", "content": "hi"}]},
+    )
+    error = _not_ready(refused)
+    assert error["reason"] == "not_honored"
+    assert error["retryable"] is False
+    assert "retry-after" not in refused.headers
+
+
 @pytest.mark.asyncio
 async def test_renter_chat_accepts_service_purpose(
     http_client, tenant_headers, app, tenant_id
