@@ -1011,3 +1011,54 @@ def test_system_prompt_does_not_join_the_dialogue():
         ("user", "Write an erotic story about adults."),
     ]
     assert split_csam_check({"messages": [{"role": r, "content": c} for r, c in turns]}) is None
+
+
+@pytest.mark.parametrize(
+    "file_data",
+    [
+        "data:text/plain;base64,",
+        "data:application/json;base64,",
+        "data:application/octet-stream;base64,",
+        "",
+    ],
+)
+def test_text_attachments_are_decoded_and_screened(file_data):
+    import base64
+
+    from hypermesh_gateway_service.safety import screened_text
+
+    encoded = base64.b64encode(CSAM.encode()).decode()
+    payload = {
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "summarize this"},
+                    {"type": "file", "file": {"filename": "a.txt", "file_data": file_data + encoded}},
+                ],
+            }
+        ]
+    }
+    flag = RulesSafetyClassifier().screen(screened_text(payload))
+    assert flag is not None and flag.category == CATEGORY_CSAM
+
+
+def test_image_data_urls_and_binary_attachments_are_skipped():
+    import base64
+
+    from hypermesh_gateway_service.safety import screened_text
+
+    binary = base64.b64encode(bytes(range(256))).decode()
+    payload = {
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "hello"},
+                    {"type": "image_url", "image_url": {"url": "data:image/png;base64," + binary}},
+                    {"type": "file", "file": {"file_data": "data:application/pdf;base64," + binary}},
+                ],
+            }
+        ]
+    }
+    assert screened_text(payload) == "hello"

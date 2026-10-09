@@ -34,6 +34,8 @@ Settings (environment):
 from __future__ import annotations
 
 import asyncio
+import base64
+import binascii
 import logging
 import os
 import re
@@ -443,6 +445,40 @@ _SCHEMA_KEYS = _STRUCTURAL_KEYS | frozenset({
     "service_level", "service_tier", "store", "voice",
 }) | _MEDIA_KEYS
 _DATA_URL = re.compile(r"data:[\w.+-]+/[\w.+-]+(?:;[\w-]+=[\w.-]+)*;base64,[A-Za-z0-9+/=\s]*$")
+_DATA_URL_PARTS = re.compile(r"data:([\w.+-]+)/[\w.+-]+[^,]*;base64,(.*)$", re.DOTALL)
+_BARE_BASE64 = re.compile(r"[A-Za-z0-9+/=\s]{16,}")
+_MEDIA_TYPES = frozenset({"image", "audio", "video"})
+
+
+def _decoded_text(encoded: str) -> str | None:
+    """The attachment as text when it is valid base64 of UTF-8, else None."""
+
+    try:
+        raw = base64.b64decode("".join(encoded.split()), validate=True)
+        return raw.decode("utf-8")
+    except (binascii.Error, ValueError):
+        return None
+
+
+def _media_strings(item: str) -> list[str]:
+    """What to screen for a string in a media field (url, image_url, data, file_data).
+
+    An image, audio or video data URL is skipped. Any other attachment that
+    decodes to UTF-8 text (text/plain, JSON, CSV, a bare base64 string) is
+    screened as decoded text. A binary document (for example a PDF) cannot be
+    read by the rules baseline and passes unscreened.
+    """
+
+    parts = _DATA_URL_PARTS.match(item)
+    if parts is not None and _DATA_URL.match(item):
+        if parts.group(1).lower() in _MEDIA_TYPES:
+            return []
+        decoded = _decoded_text(parts.group(2))
+        return [decoded] if decoded else []
+    if _BARE_BASE64.fullmatch(item):
+        decoded = _decoded_text(item)
+        return [item, decoded] if decoded else [item]
+    return [item]
 _WHITESPACE = re.compile(r"\s+")
 
 
@@ -458,7 +494,8 @@ def _strings(value: Any) -> list[str]:
                 continue
             # Only a media payload field may carry a data URL; text fields are
             # screened whatever their prefix.
-            if key in _MEDIA_KEYS and _DATA_URL.match(item):
+            if key in _MEDIA_KEYS:
+                out.extend(_media_strings(item))
                 continue
             out.append(item)
         elif isinstance(item, dict):
