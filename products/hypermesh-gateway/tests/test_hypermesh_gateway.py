@@ -673,6 +673,28 @@ async def test_host_4xx_and_unhonored_ticket_are_not_retryable(
 
 
 @pytest.mark.asyncio
+async def test_unhonored_ticket_with_peer_down_is_not_retryable(
+    http_client, tenant_headers, app, tenant_id
+):
+    _mock_runtime(app)
+    app.state.peer_up = False
+    suspended = uuid.uuid4()
+    app.state.ticket_cache.put(tenant_id, _signed_ticket(suspended, path_b_state="suspended"))
+    wrong_purpose = uuid.uuid4()
+    app.state.ticket_cache.put(tenant_id, _signed_ticket(wrong_purpose, purpose="ir"))
+    for lease_id in (suspended, wrong_purpose):
+        refused = await http_client.post(
+            "/v1/chat/completions",
+            headers=_renter(tenant_headers),
+            json={"lease_id": str(lease_id), "messages": [{"role": "user", "content": "hi"}]},
+        )
+        error = _not_ready(refused)
+        assert error["reason"] == "not_honored"
+        assert error["retryable"] is False
+        assert "retry-after" not in refused.headers
+
+
+@pytest.mark.asyncio
 async def test_renter_chat_accepts_service_purpose(
     http_client, tenant_headers, app, tenant_id
 ):

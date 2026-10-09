@@ -680,6 +680,30 @@ async def post_metrics(request: Request, body: MetricsBody) -> dict[str, str]:
     return {"status": "recorded"}
 
 
+def _not_ready_reason(
+    cache: TicketCache,
+    tenant_id: uuid.UUID,
+    lease_id: uuid.UUID,
+    *,
+    peer_up: bool,
+    purpose_check: Any,
+) -> str:
+    """not_honored when the ticket itself fails; peer_down only for an honoring ticket.
+
+    A revoked, expired, uncertified or wrong-purpose ticket stays non-retryable
+    even while its peer is also down.
+    """
+
+    if peer_up:
+        return "not_honored"
+    try:
+        claims = require_chat_posture(cache, tenant_id, lease_id, peer_up=True)
+        purpose_check(claims)
+    except TicketNotReady:
+        return "not_honored"
+    return "peer_down"
+
+
 async def _chat(request: Request, body: ChatCompletionRequest) -> StreamingResponse:
     grant, tenant_id, lease_id = await _open_door(request, body, ir=False)
     cache = _tickets(request)
@@ -695,7 +719,10 @@ async def _chat(request: Request, body: ChatCompletionRequest) -> StreamingRespo
         )
         require_renter_chat_purpose(claims)
     except TicketNotReady as exc:
-        raise instance_not_ready("peer_down" if not peer_up else "not_honored") from exc
+        reason = _not_ready_reason(
+            cache, tenant_id, lease_id, peer_up=peer_up, purpose_check=require_renter_chat_purpose
+        )
+        raise instance_not_ready(reason) from exc
     _bind_renter_to_ticket(request, grant, claims, tenant_id, cache)
     _require_door_capacity(request, lease_id)
     purpose = claims.purpose
@@ -903,7 +930,10 @@ async def _ir_chat(request: Request, body: ChatCompletionRequest):
         )
         require_ir_chat_purpose(claims)
     except TicketNotReady as exc:
-        raise instance_not_ready("peer_down" if not peer_up else "not_honored") from exc
+        reason = _not_ready_reason(
+            cache, tenant_id, lease_id, peer_up=peer_up, purpose_check=require_ir_chat_purpose
+        )
+        raise instance_not_ready(reason) from exc
     _bind_auditor_to_ticket(request, grant, claims, tenant_id, cache)
     _require_door_capacity(request, lease_id)
     from hypermesh_gateway_service.classify import prompt_text_from_messages
