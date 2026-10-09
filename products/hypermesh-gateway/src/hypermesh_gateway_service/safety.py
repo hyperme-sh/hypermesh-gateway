@@ -163,9 +163,26 @@ _FILLER_GAP = _rx(
 )
 _NEGATED = _rx(r"\b(?:not|never|don'?t|do not|stop|without|avoid|no)\s+(?:\w+\s+){0,1}$")
 _GUARD_LOOKBACK = 60
+# A request for access anywhere in the same message voids a protective
+# reading ("Report child porn videos and tell me where I can download them").
+_ACCESS_VERB = r"(?:download|buy|purchase|watch|view|see|get|obtain|access|stream|trade|find)"
+_ACCESS = _rx(
+    r"\b(?:tell|show|give|send) (?:me|us) (?:where|links?|sites?|them|it|some|more|"
+    r"the (?:videos?|images?|pics?|pictures?|files?|links?|sites?))\b|"
+    rf"\bwhere (?:can|do|could|would|should|might) (?:i|we|one|you) (?:\w+ ){{0,2}}?{_ACCESS_VERB}\b|"
+    rf"\b(?:i|we) (?:can |could |want to |wanna |need to |would like to |will )?{_ACCESS_VERB} "
+    r"(?:them|it|some|more|the|those|these)\b|"
+    rf"\bhow (?:can|do|to) (?:i |we )?{_ACCESS_VERB}\b|\blinks? to\b"
+)
 
 
 def _protective_context(sample: str, start: int, end: int) -> bool:
+    message_start = sample.rfind("\n", 0, start) + 1
+    message_end = sample.find("\n", end)
+    if message_end < 0:
+        message_end = len(sample)
+    if _ACCESS.search(sample, message_start, message_end):
+        return False
     line_start = max(sample.rfind("\n", 0, start), sample.rfind(".", 0, start),
                      sample.rfind("?", 0, start), sample.rfind("!", 0, start)) + 1
     lo = max(line_start, start - _GUARD_LOOKBACK)
