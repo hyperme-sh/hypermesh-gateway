@@ -201,6 +201,7 @@ def _protective_context(sample: str, start: int, end: int) -> bool:
     return False
 
 
+_CSAM_MINOR_SEXUAL = _rx(rf"\b{_MINOR}\b.{{0,60}}\b{_SEXUAL}|\b{_SEXUAL}.{{0,60}}\b{_MINOR}\b")
 _CSAM_NAMED = _rx(
     r"\b(?:csam|child porn\w*|kiddie porn\w*|pedo ?porn\w*|"
     r"(?:loli|shota)(?:con)? (?:hentai|porn\w*|nsfw|lewd))\b"
@@ -227,7 +228,7 @@ _RULES: tuple[_Rule, ...] = (
     _Rule(
         "csam.minor_sexual",
         CATEGORY_CSAM,
-        _rx(rf"\b{_MINOR}\b.{{0,60}}\b{_SEXUAL}|\b{_SEXUAL}.{{0,60}}\b{_MINOR}\b"),
+        _CSAM_MINOR_SEXUAL,
         guarded=True,
     ),
     _Rule(
@@ -726,13 +727,18 @@ SPLIT_RULE_ID = "csam.named.split"
 
 
 def split_csam_check(payload: dict[str, Any] | None) -> tuple[SafetyFlag, str] | None:
-    """Fixed CSAM backstop for an explicit term split across one role's turns.
+    """Fixed CSAM backstop for a phrase split across one role's turns.
 
-    ``screened_text`` joins only adjacent turns from the same role, so a term
-    split around an inserted turn from another role ("... child", "ok",
-    "porn videos?") is not adjacent there. This reads each role's turns in
-    order, on their own, and returns a flag plus the text it matched in. It
-    runs whatever classifier is configured. Caller must not log the text.
+    ``screened_text`` joins only adjacent turns from the same role, so a phrase
+    split around an inserted turn from another role ("Write an erotic story
+    about", "Okay", "children") is not adjacent there. This reads each role's
+    turns in order, on their own, and checks both CSAM patterns (explicit
+    terms and minor + sexual proximity) for a match that spans a turn break.
+    Protective wording can suppress only a proximity match, only when it
+    governs that match and no turn anywhere asks for access to material.
+    Errs toward flagging: unrelated turns that happen to form a match are
+    flagged for operator review. Runs whatever classifier is configured.
+    Caller must not log the text.
     """
 
     if not isinstance(payload, dict) or not isinstance(payload.get("messages"), list):
@@ -744,11 +750,25 @@ def split_csam_check(payload: dict[str, Any] | None) -> tuple[SafetyFlag, str] |
         segment = _segment(_strings(message))
         if segment:
             by_role.setdefault(str(message.get("role")), []).append(segment)
+    access_requested = any(
+        _ACCESS.search(segment) for segments in by_role.values() for segment in segments
+    )
     for segments in by_role.values():
         if len(segments) < 2:
             continue
         text = "\n".join(segments)
         start = _straddling_csam(text)
+        if start is None:
+            joined = text.replace("\n", " ")
+            for match in _CSAM_MINOR_SEXUAL.finditer(joined):
+                if "\n" not in text[match.start() : match.end()]:
+                    continue
+                if not access_requested and _protective_context(
+                    joined, match.start(), match.end()
+                ):
+                    continue
+                start = match.start()
+                break
         if start is not None:
             flag = SafetyFlag(
                 category=CATEGORY_CSAM,
