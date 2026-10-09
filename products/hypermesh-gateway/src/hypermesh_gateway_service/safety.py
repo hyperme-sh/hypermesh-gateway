@@ -36,11 +36,12 @@ from __future__ import annotations
 import asyncio
 import base64
 import binascii
+import codecs
 import logging
 import os
 import re
 import uuid
-from urllib.parse import unquote
+from urllib.parse import unquote_to_bytes
 from collections import deque
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -459,18 +460,95 @@ _SCHEMA_KEYS = _STRUCTURAL_KEYS | frozenset({
     "parallel_tool_calls", "modalities", "reasoning_effort", "prediction",
     "service_level", "service_tier", "store", "voice",
 }) | _MEDIA_KEYS
-_DATA_URL = re.compile(r"data:[\w.+-]+/[\w.+-]+(?:;[\w-]+=[\w.-]+)*;base64,[A-Za-z0-9+/=\s]*$")
-_DATA_URL_PARTS = re.compile(r"data:([\w.+-]+)/[\w.+-]+[^,]*;base64,(.*)$", re.DOTALL)
 _BARE_BASE64 = re.compile(r"[A-Za-z0-9+/=\s]{16,}")
 _MEDIA_TYPES = frozenset({"image", "audio", "video"})
+_TEXT_SUBTYPES = frozenset({
+    "json", "xml", "csv", "yaml", "x-yaml", "javascript", "x-javascript", "ecmascript",
+    "x-sh", "x-shellscript", "markdown", "x-markdown", "x-ndjson", "ndjson", "rtf",
+    "x-python", "x-tex", "sql", "graphql", "toml", "x-toml", "svg+xml", "xhtml+xml",
+})
+_BOMS = (
+    (b"\x00\x00\xfe\xff", "utf-32-be"),
+    (b"\xff\xfe\x00\x00", "utf-32-le"),
+    (b"\xef\xbb\xbf", "utf-8-sig"),
+    (b"\xfe\xff", "utf-16"),
+    (b"\xff\xfe", "utf-16"),
+)
+
+UNSCREENABLE_MESSAGE = (
+    "An attachment's text could not be decoded for automated safety screening."
+)
+UNSCREENABLE_CODE = "attachment_not_screenable"
 
 
-def _decoded_text(encoded: str) -> str | None:
-    """The attachment as text when it is valid base64 of UTF-8, else None."""
+class UnscreenableContent(ValueError):
+    """A text attachment that cannot be decoded. The request is refused."""
 
+
+def _textual(mime: str) -> bool:
+    main, _, sub = mime.partition("/")
+    return (
+        main == "text"
+        or sub in _TEXT_SUBTYPES
+        or sub.endswith("+json")
+        or sub.endswith("+xml")
+    )
+
+
+def _looks_like_utf16(raw: bytes) -> str | None:
+    """utf-16-le/-be for BOM-less UTF-16 text (every other byte NUL), else None."""
+
+    if len(raw) < 4 or len(raw) % 2:
+        return None
+    odd_nul = raw[1::2].count(0) / (len(raw) // 2)
+    even_nul = raw[0::2].count(0) / (len(raw) // 2)
+    if odd_nul > 0.6 and even_nul < 0.1:
+        return "utf-16-le"
+    if even_nul > 0.6 and odd_nul < 0.1:
+        return "utf-16-be"
+    return None
+
+
+def _decode_bytes(raw: bytes, *, charset: str | None, textual: bool) -> str | None:
+    """Decode attachment bytes for screening.
+
+    A declared charset is honoured; an unknown charset or bytes that do not
+    decode in it refuse the request. Without one, a BOM (UTF-8/16/32),
+    BOM-less UTF-16, then UTF-8 are tried. A textual type that still does not decode
+    refuses the request; other bytes are treated as binary (None).
+    """
+
+    if charset:
+        try:
+            codecs.lookup(charset)
+            return raw.decode(charset)
+        except (LookupError, UnicodeDecodeError) as exc:
+            raise UnscreenableContent(charset) from exc
+    for bom, encoding in _BOMS:
+        if raw.startswith(bom):
+            try:
+                return raw.decode(encoding)
+            except UnicodeDecodeError as exc:
+                raise UnscreenableContent(encoding) from exc
+    # BOM-less UTF-16 first: its NUL bytes are also valid UTF-8.
+    utf16 = _looks_like_utf16(raw)
+    if utf16 is not None:
+        try:
+            return raw.decode(utf16)
+        except UnicodeDecodeError:
+            pass
     try:
-        raw = base64.b64decode("".join(encoded.split()), validate=True)
         return raw.decode("utf-8")
+    except UnicodeDecodeError:
+        pass
+    if textual:
+        raise UnscreenableContent("undecodable text")
+    return None
+
+
+def _b64(encoded: str) -> bytes | None:
+    try:
+        return base64.b64decode("".join(encoded.split()), validate=True)
     except (binascii.Error, ValueError):
         return None
 
@@ -478,27 +556,46 @@ def _decoded_text(encoded: str) -> str | None:
 def _media_strings(item: str) -> list[str]:
     """What to screen for a string in a media field (url, image_url, data, file_data).
 
-    An image, audio or video data URL is skipped. Any other attachment that
-    decodes to UTF-8 text (text/plain, JSON, CSV, a bare base64 string) is
-    screened as decoded text. A binary document (for example a PDF) cannot be
-    read by the rules baseline and passes unscreened.
+    A base64 image, audio or video data URL is skipped (SVG is treated as
+    text). Any other data URL is decoded with its declared charset, else by
+    BOM, UTF-8 or BOM-less UTF-16, and screened as text. A text attachment
+    that cannot be decoded raises ``UnscreenableContent`` and the request is
+    refused; it is never passed unscreened. A binary document (for example a
+    PDF) cannot be read by the rules baseline and passes unscreened.
     """
 
-    if item[:5].lower() == "data:" and ";base64," not in item.split(",", 1)[0].lower() + ",":
-        # A plain (percent-encoded) data URL is text whatever its type:
-        # screen it decoded.
-        payload = item.split(",", 1)[1] if "," in item else ""
-        return [unquote(payload)] if payload else []
-    parts = _DATA_URL_PARTS.match(item)
-    if parts is not None and _DATA_URL.match(item):
-        if parts.group(1).lower() in _MEDIA_TYPES:
-            return []
-        decoded = _decoded_text(parts.group(2))
+    if item[:5].lower() == "data:":
+        header, sep, payload = item[5:].partition(",")
+        if not sep:
+            return [item]
+        fields = [field.strip() for field in header.split(";")]
+        mime = (fields[0] or "text/plain").lower()
+        is_base64 = len(fields) > 1 and fields[-1].lower() == "base64"
+        charset = None
+        for field in fields[1:]:
+            name, eq, value = field.partition("=")
+            if eq and name.strip().lower() == "charset":
+                charset = value.strip().strip('"') or None
+        textual = _textual(mime) or charset is not None
+        if is_base64:
+            raw = _b64(payload)
+            if raw is None:
+                return [payload]
+            if mime.partition("/")[0] in _MEDIA_TYPES and not textual:
+                return []
+        else:
+            raw = unquote_to_bytes(payload)
+            # Plain data URLs are text unless they declare binary media.
+            textual = textual or mime.partition("/")[0] not in _MEDIA_TYPES
+        decoded = _decode_bytes(raw, charset=charset, textual=textual)
         return [decoded] if decoded else []
     if _BARE_BASE64.fullmatch(item):
-        decoded = _decoded_text(item)
+        raw = _b64(item)
+        decoded = _decode_bytes(raw, charset=None, textual=False) if raw else None
         return [item, decoded] if decoded else [item]
     return [item]
+
+
 _WHITESPACE = re.compile(r"\s+")
 
 

@@ -1125,3 +1125,77 @@ def test_identifier_shaped_minor_sexual_phrase_is_flagged():
     }
     flag = RulesSafetyClassifier().screen(screened_text(payload))
     assert flag is not None and flag.category == CATEGORY_CSAM
+
+
+def _file_payload(file_data: str) -> dict:
+    return {
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "summarize"},
+                    {"type": "file", "file": {"filename": "a.txt", "file_data": file_data}},
+                ],
+            }
+        ]
+    }
+
+
+@pytest.mark.parametrize(
+    ("header", "encoding"),
+    [
+        ("data:text/plain;charset=utf-16;base64,", "utf-16"),
+        ("data:text/plain;charset=utf-16le;base64,", "utf-16-le"),
+        ("data:text/plain;charset=utf-32;base64,", "utf-32"),
+        ("data:text/plain;charset=iso-8859-1;base64,", "latin-1"),
+        ("data:text/plain;base64,", "utf-16"),  # BOM, no charset
+        ("data:application/octet-stream;base64,", "utf-16-le"),  # BOM-less UTF-16
+        ("data:application/pdf;base64,", "utf-16-be"),
+    ],
+)
+def test_non_utf8_text_attachments_are_decoded_and_screened(header, encoding):
+    import base64
+
+    from hypermesh_gateway_service.safety import screened_text
+
+    data = header + base64.b64encode(CSAM.encode(encoding)).decode()
+    flag = RulesSafetyClassifier().screen(screened_text(_file_payload(data)))
+    assert flag is not None and flag.category == CATEGORY_CSAM
+
+
+@pytest.mark.parametrize(
+    "file_data",
+    [
+        "data:text/plain;charset=x-made-up;base64,"
+        + __import__("base64").b64encode(b"hello").decode(),
+        "data:text/plain;base64,"
+        + __import__("base64").b64encode(b"\xff\x00\xfe\x81\x82" * 7).decode(),
+        "data:text/plain;charset=utf-8,%ff%fe%fd",
+    ],
+)
+def test_undecodable_text_attachment_refuses_the_request(file_data):
+    from hypermesh_gateway_service.safety import UnscreenableContent, screened_text
+
+    with pytest.raises(UnscreenableContent):
+        screened_text(_file_payload(file_data))
+
+
+@pytest.mark.asyncio
+async def test_undecodable_text_attachment_is_refused_at_the_door(
+    http_client, tenant_headers, app, tenant_id, control_plane
+):
+    import base64
+
+    lease_id = uuid.uuid4()
+    app.state.ticket_cache.put(tenant_id, _signed_ticket(lease_id))
+    calls = _counting_runtime(app)
+    data = "data:text/plain;charset=x-made-up;base64," + base64.b64encode(b"hi").decode()
+    response = await http_client.post(
+        "/v1/chat/completions",
+        headers=renter_headers(tenant_headers),
+        json={"lease_id": str(lease_id), **_file_payload(data)},
+    )
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "attachment_not_screenable"
+    assert calls == []
+    assert control_plane.safety_flags == []

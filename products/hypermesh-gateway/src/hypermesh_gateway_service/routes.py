@@ -59,8 +59,11 @@ from hypermesh_gateway_service.safety import (
     UNAVAILABLE_MESSAGE,
     TOO_LARGE_CODE,
     TOO_LARGE_MESSAGE,
+    UNSCREENABLE_CODE,
+    UNSCREENABLE_MESSAGE,
     SafetyRecord,
     SafetyRecorder,
+    UnscreenableContent,
     record_excerpt,
     resolve_safety_classifier,
     screen_request,
@@ -199,7 +202,12 @@ async def _screen(
     if not screening_enabled():
         return
     payload = body.model_dump(mode="json")
-    text = screened_text(payload)
+    try:
+        text = screened_text(payload)
+    except UnscreenableContent:
+        # Never forward an attachment the screen could not read.
+        logger.warning("safety screening refused undecodable attachment lease=%s", lease_id)
+        raise DoorError(400, UNSCREENABLE_MESSAGE, UNSCREENABLE_CODE) from None
     if not text:
         return
     classifier = _safety_classifier(request)
