@@ -86,7 +86,7 @@ The edge `timeout client` / `timeout server` in front of this process is owned b
 
 ## Automated safety screening
 
-Every request on `/v1/chat/completions` and `/v1/ir/chat/completions` (and the sibling routes) is screened in process before it reaches the host (`safety.py`). Every string the door forwards is screened: message content, tool-call arguments, tool definitions and extra body fields (structural keys and data URLs are skipped). The screen covers a small set of severe categories:
+Every request on `/v1/chat/completions` and `/v1/ir/chat/completions` (and the sibling routes) is screened in process before it reaches the host (`safety.py`). Every string the door forwards is screened: message content, tool-call arguments, tool definitions, extra body fields and any dictionary key that is not a known request or JSON Schema field name, such as a tool-schema property name (structural fields and data URLs are skipped). The screen covers a small set of severe categories:
 
 | Category | `category` | Default action |
 |----------|------------|----------------|
@@ -100,7 +100,7 @@ Every request on `/v1/chat/completions` and `/v1/ir/chat/completions` (and the s
 - A blocked request returns `400` with code `content_policy_violation` on `/v1/*` and `{"detail": ...}` on sibling routes. The host is not called.
 - `HYPERMESH_SAFETY_ACTION_SELF_HARM`, `HYPERMESH_SAFETY_ACTION_MALWARE_INTRUSION`, `HYPERMESH_SAFETY_ACTION_VIOLENT_EXTREMISM`: `allow` (default) or `block`. `csam` is always `block`.
 - `HYPERMESH_SAFETY_TIMEOUT_MS` (default 250) is the base classification budget, plus 2 seconds per million characters. Every forwarded character is screened; a request whose screened text exceeds `HYPERMESH_SAFETY_MAX_CHARS` (default 1,048,576) is refused with `413 request_too_large` and never partly screened.
-- Each message is screened as one line (content parts and tool calls joined); rules do not match across messages or fields. When several categories match, a blocking category wins.
+- Each message is screened as one line (content parts and tool calls joined), and so is each entry of a top-level list such as `tools`; rules do not match across messages, fields or list entries. When several categories match, a blocking category wins.
 - `HYPERMESH_SAFETY_FAIL_MODE`: `open` (default) serves the request unscreened when the classifier errors or runs past its budget and logs the failure without text; `closed` refuses with `503 safety_screening_unavailable`. Neither stores anything.
 - `HYPERMESH_SAFETY_SCREENING=off` disables screening.
 - If the control plane is unreachable, a record waits in process memory (never on disk) and is retried on the refresh loop. At most 1000 wait; past that the oldest is evicted and logged at error level with its id and category. A restart drops records still waiting. A record the control plane rejects outright (a 4xx other than 401, 403, 404, 408, 409, 425 or 429) is dropped and logged with its id, category and status so it cannot block the records behind it.

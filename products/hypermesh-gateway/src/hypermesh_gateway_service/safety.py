@@ -350,6 +350,23 @@ def fail_closed() -> bool:
 
 _STRUCTURAL_KEYS = frozenset({"role", "type", "id", "tool_call_id", "model", "lease_id"})
 _MEDIA_KEYS = frozenset({"url", "image_url", "data", "file_data"})
+# Field names of the chat request and of JSON Schema. Any other dictionary key
+# (a tool-schema property name, an extra field) is free text the host sees, so
+# it is screened like a value.
+_SCHEMA_KEYS = _STRUCTURAL_KEYS | frozenset({
+    "messages", "content", "text", "name", "refusal", "audio", "input_audio", "format",
+    "file", "file_id", "filename", "detail", "tool_calls", "function", "arguments",
+    "function_call", "tools", "tool_choice", "functions", "description", "parameters",
+    "strict", "response_format", "json_schema", "schema", "properties", "items",
+    "required", "enum", "const", "default", "title", "examples", "anyOf", "oneOf",
+    "allOf", "not", "$ref", "$defs", "definitions", "additionalProperties",
+    "minimum", "maximum", "minItems", "maxItems", "minLength", "maxLength", "pattern",
+    "stop", "stream", "stream_options", "include_usage", "temperature", "top_p", "top_k",
+    "n", "max_tokens", "max_completion_tokens", "presence_penalty", "frequency_penalty",
+    "logit_bias", "logprobs", "top_logprobs", "seed", "user", "metadata",
+    "parallel_tool_calls", "modalities", "reasoning_effort", "prediction",
+    "service_level", "service_tier", "store", "voice",
+}) | _MEDIA_KEYS
 _DATA_URL = re.compile(r"data:[\w.+-]+/[\w.+-]+(?:;[\w-]+=[\w.-]+)*;base64,[A-Za-z0-9+/=\s]*$")
 _WHITESPACE = re.compile(r"\s+")
 
@@ -370,11 +387,15 @@ def _strings(value: Any) -> list[str]:
                 continue
             out.append(item)
         elif isinstance(item, dict):
-            children = [
-                (child, str(child_key))
-                for child_key, child in item.items()
-                if not (child_key in _STRUCTURAL_KEYS and isinstance(child, str))
-            ]
+            children: list[tuple[Any, str | None]] = []
+            for child_key, child in item.items():
+                if child_key in _STRUCTURAL_KEYS and isinstance(child, str):
+                    continue
+                # Keys reach the host too (tool-schema property names, extra
+                # fields), so they are screened like values.
+                if child_key not in _SCHEMA_KEYS:
+                    children.append((str(child_key), None))
+                children.append((child, str(child_key)))
             stack.extend(reversed(children))
         elif isinstance(item, list):
             stack.extend((child, key) for child in reversed(item))
@@ -393,7 +414,9 @@ def screened_text(payload: dict[str, Any] | list[Any] | None) -> str:
     Walks the whole request body (message content, tool-call arguments, tool
     definitions and any extra field) so nothing reaches the host unscreened.
     Each message becomes one line (its content parts and tool calls joined
-    with spaces); each other top-level field becomes its own line. Rules do
+    with spaces); each other top-level field, and each entry of a top-level
+    list such as ``tools``, becomes its own line. Dictionary keys are screened
+    along with values. Rules do
     not match across lines, so one message cannot change how another is read.
     Structural keys (role, type, ids, model, lease_id) are skipped, and so is a
     base64 data URL in a media field (url, image_url, data, file_data).
@@ -407,7 +430,12 @@ def screened_text(payload: dict[str, Any] | list[Any] | None) -> str:
         for key, value in payload.items():
             if key == "messages" or (key in _STRUCTURAL_KEYS and isinstance(value, str)):
                 continue
-            lines.append(_segment(_strings(value)))
+            if key not in _SCHEMA_KEYS:
+                lines.append(_segment([str(key)]))
+            # Each entry of a top-level list (each tool definition, each stop
+            # string) is its own line, so rules never join independent entries.
+            for entry in value if isinstance(value, list) else [value]:
+                lines.append(_segment(_strings(entry)))
     else:
         lines.append(_segment(_strings(payload)))
     return "\n".join(line for line in lines if line)
