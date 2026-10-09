@@ -55,6 +55,7 @@ from hypermesh_gateway_service.receipts import ReceiptStore
 from hypermesh_gateway_service.safety import (
     BLOCKED_CODE,
     BLOCKED_MESSAGE,
+    CATEGORY_CSAM,
     UNAVAILABLE_MESSAGE,
     TOO_LARGE_CODE,
     TOO_LARGE_MESSAGE,
@@ -65,6 +66,7 @@ from hypermesh_gateway_service.safety import (
     screen_request,
     screened_text,
     screening_enabled,
+    split_csam_check,
 )
 from hypermesh_gateway_service.renter_auth import (
     RenterGrant,
@@ -196,7 +198,8 @@ async def _screen(
 
     if not screening_enabled():
         return
-    text = screened_text(body.model_dump(mode="json"))
+    payload = body.model_dump(mode="json")
+    text = screened_text(payload)
     if not text:
         return
     classifier = _safety_classifier(request)
@@ -208,6 +211,12 @@ async def _screen(
             raise DoorError(503, UNAVAILABLE_MESSAGE, "safety_screening_unavailable")
         return
     flag = outcome.flag
+    action = outcome.action
+    if flag is None or flag.category != CATEGORY_CSAM:
+        split = split_csam_check(payload)
+        if split is not None:
+            flag, text = split
+            action = "block"
     if flag is None:
         return
     record = SafetyRecord(
@@ -216,7 +225,7 @@ async def _screen(
         lease_id=lease_id,
         subject=subject,
         category=flag.category,
-        action=outcome.action,
+        action=action,
         rule_id=flag.rule_id,
         classifier_version=flag.classifier_version,
         door=door,
@@ -227,12 +236,12 @@ async def _screen(
         "safety screening flagged lease=%s category=%s action=%s version=%s record=%s",
         lease_id,
         flag.category,
-        outcome.action,
+        action,
         flag.classifier_version,
         record.id,
     )
     await _safety_recorder(request).record(_control(request), record)
-    if outcome.action == "block":
+    if action == "block":
         raise DoorError(400, BLOCKED_MESSAGE, BLOCKED_CODE)
 
 

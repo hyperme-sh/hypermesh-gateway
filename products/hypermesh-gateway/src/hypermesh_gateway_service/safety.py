@@ -201,14 +201,29 @@ def _protective_context(sample: str, start: int, end: int) -> bool:
     return False
 
 
+_CSAM_NAMED = _rx(
+    r"\b(?:csam|child porn\w*|kiddie porn\w*|pedo ?porn\w*|"
+    r"(?:loli|shota)(?:con)? (?:hentai|porn\w*|nsfw|lewd))\b"
+)
+
+
+
+def _straddling_csam(text: str) -> int | None:
+    """Start of an explicit CSAM term split across a line break, else None.
+
+    Lines are turns or fields. The term is matched with breaks read as spaces;
+    such a match is never treated as protective.
+    """
+
+    joined = text.replace("\n", " ")
+    for match in _CSAM_NAMED.finditer(joined):
+        if "\n" in text[match.start() : match.end()]:
+            return match.start()
+    return None
+
+
 _RULES: tuple[_Rule, ...] = (
-    _Rule(
-        "csam.named",
-        CATEGORY_CSAM,
-        _rx(r"\b(?:csam|child porn\w*|kiddie porn\w*|pedo ?porn\w*|"
-            r"(?:loli|shota)(?:con)? (?:hentai|porn\w*|nsfw|lewd))\b"),
-        guarded=True,
-    ),
+    _Rule("csam.named", CATEGORY_CSAM, _CSAM_NAMED, guarded=True),
     _Rule(
         "csam.minor_sexual",
         CATEGORY_CSAM,
@@ -298,11 +313,18 @@ class RulesSafetyClassifier:
         if not text:
             return flags
         seen: set[str] = set()
+        # Protective wording suppresses a CSAM match only when no turn in the
+        # whole request asks for access to material.
+        access_requested = _ACCESS.search(text) is not None
         for rule in self._rules:
             if rule.category in seen:
                 continue
             for match in rule.pattern.finditer(text):
-                if rule.guarded and _protective_context(text, match.start(), match.end()):
+                if (
+                    rule.guarded
+                    and not access_requested
+                    and _protective_context(text, match.start(), match.end())
+                ):
                     continue
                 flags.append(
                     SafetyFlag(
@@ -314,6 +336,18 @@ class RulesSafetyClassifier:
                 )
                 seen.add(rule.category)
                 break
+        if CATEGORY_CSAM not in seen:
+            start = _straddling_csam(text)
+            if start is not None:
+                flags.insert(
+                    0,
+                    SafetyFlag(
+                        category=CATEGORY_CSAM,
+                        rule_id="csam.named",
+                        classifier_version=self._version,
+                        match_start=start,
+                    ),
+                )
         return flags
 
 
@@ -430,11 +464,13 @@ def screened_text(payload: dict[str, Any] | list[Any] | None) -> str:
 
     Walks the whole request body (message content, tool-call arguments, tool
     definitions and any extra field) so nothing reaches the host unscreened.
-    Each message becomes one line (its content parts and tool calls joined
-    with spaces); each other top-level field, and each entry of a top-level
+    Each turn becomes one line (its content parts and tool calls joined with
+    spaces; consecutive messages from the same role are one turn); each other
+    top-level field, and each entry of a top-level
     list such as ``tools``, becomes its own line. Dictionary keys are screened
-    along with values. Rules do
-    not match across lines, so one message cannot change how another is read.
+    along with values. Proximity rules do not match across lines, so an
+    unrelated turn cannot form a match; the explicit CSAM terms are also
+    matched across line breaks (see ``RulesSafetyClassifier``).
     Structural keys (role, type, ids, model, lease_id) are skipped, and so is a
     base64 data URL in a media field (url, image_url, data, file_data).
     """
@@ -442,8 +478,18 @@ def screened_text(payload: dict[str, Any] | list[Any] | None) -> str:
     lines: list[str] = []
     if isinstance(payload, dict):
         messages = payload.get("messages")
+        previous_role: object = object()
         for message in messages if isinstance(messages, list) else [messages]:
-            lines.append(_segment(_strings(message)))
+            segment = _segment(_strings(message))
+            role = message.get("role") if isinstance(message, dict) else None
+            if segment and lines and role is not None and role == previous_role:
+                # Consecutive messages from one role read as one turn, so a
+                # phrase split across them is still matched.
+                lines[-1] = f"{lines[-1]} {segment}"
+            elif segment:
+                lines.append(segment)
+            if segment:
+                previous_role = role
         for key, value in payload.items():
             if key == "messages" or (key in _STRUCTURAL_KEYS and isinstance(value, str)):
                 continue
@@ -645,3 +691,41 @@ async def screen_request(
 
 def resolve_safety_classifier() -> SafetyClassifier:
     return RulesSafetyClassifier()
+
+
+SPLIT_RULE_ID = "csam.named.split"
+
+
+def split_csam_check(payload: dict[str, Any] | None) -> tuple[SafetyFlag, str] | None:
+    """Fixed CSAM backstop for an explicit term split across one role's turns.
+
+    ``screened_text`` joins only adjacent turns from the same role, so a term
+    split around an inserted turn from another role ("... child", "ok",
+    "porn videos?") is not adjacent there. This reads each role's turns in
+    order, on their own, and returns a flag plus the text it matched in. It
+    runs whatever classifier is configured. Caller must not log the text.
+    """
+
+    if not isinstance(payload, dict) or not isinstance(payload.get("messages"), list):
+        return None
+    by_role: dict[str, list[str]] = {}
+    for message in payload["messages"]:
+        if not isinstance(message, dict):
+            continue
+        segment = _segment(_strings(message))
+        if segment:
+            by_role.setdefault(str(message.get("role")), []).append(segment)
+    for segments in by_role.values():
+        if len(segments) < 2:
+            continue
+        text = "\n".join(segments)
+        start = _straddling_csam(text)
+        if start is not None:
+            flag = SafetyFlag(
+                category=CATEGORY_CSAM,
+                rule_id=SPLIT_RULE_ID,
+                classifier_version=RULES_VERSION,
+                match_start=start,
+            )
+            return flag, text
+    return None
