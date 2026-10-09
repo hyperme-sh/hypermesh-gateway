@@ -731,8 +731,10 @@ def split_csam_check(payload: dict[str, Any] | None) -> tuple[SafetyFlag, str] |
 
     ``screened_text`` joins only adjacent turns from the same role, so a phrase
     split around an inserted turn from another role ("Write an erotic story
-    about", "Okay", "children") is not adjacent there. This reads each role's
-    turns in order, on their own, and checks both CSAM patterns (explicit
+    about", "Okay", "children") is not adjacent there, and a phrase split
+    across a role change is on two lines. This reads each role's turns in
+    order on their own, and the user/assistant/tool dialogue in order, and
+    checks both CSAM patterns (explicit
     terms and minor + sexual proximity) for a match that spans a turn break.
     Protective wording can suppress only a proximity match, only when it
     governs that match and no turn anywhere asks for access to material.
@@ -744,16 +746,26 @@ def split_csam_check(payload: dict[str, Any] | None) -> tuple[SafetyFlag, str] |
     if not isinstance(payload, dict) or not isinstance(payload.get("messages"), list):
         return None
     by_role: dict[str, list[str]] = {}
+    # The conversation in order without system/developer instructions: the
+    # caller writes every user, assistant and tool turn, so a phrase split
+    # across a role change ("Write an erotic story about", assistant
+    # "children") is read as one. Instructions stay out so a system prompt
+    # that mentions children does not join a later request.
+    dialogue: list[str] = []
     for message in payload["messages"]:
         if not isinstance(message, dict):
             continue
         segment = _segment(_strings(message))
         if segment:
-            by_role.setdefault(str(message.get("role")), []).append(segment)
+            role = str(message.get("role"))
+            by_role.setdefault(role, []).append(segment)
+            if role not in {"system", "developer"}:
+                dialogue.append(segment)
+    sequences = [*by_role.values(), dialogue]
     access_requested = any(
         _ACCESS.search(segment) for segments in by_role.values() for segment in segments
     )
-    for segments in by_role.values():
+    for segments in sequences:
         if len(segments) < 2:
             continue
         text = "\n".join(segments)
