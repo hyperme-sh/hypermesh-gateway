@@ -14,6 +14,7 @@ from controlplane_api.service_cors import add_optional_service_cors
 from controlplane_api.health import router as health_router
 from controlplane_api.version import router as version_router
 
+from hypermesh_gateway_service.body_limit import BodyLimitMiddleware
 from hypermesh_gateway_service.classify import Classifier, resolve_classifier
 from hypermesh_gateway_service.errors import (
     INSTANCE_NOT_READY,
@@ -28,6 +29,11 @@ from hypermesh_gateway_service.inbox import ApprovalInbox, resolve_approval_inbo
 from hypermesh_gateway_service.metrics import MeterQueue, resolve_meter_queue
 from hypermesh_gateway_service.quota import ChatQuota, resolve_chat_quota
 from hypermesh_gateway_service.receipts import ReceiptStore, resolve_receipt_store
+from hypermesh_gateway_service.safety import (
+    SafetyClassifier,
+    SafetyRecorder,
+    resolve_safety_classifier,
+)
 from hypermesh_gateway_service.routes import (
     openai_router,
     refresh_known_tenants,
@@ -48,7 +54,10 @@ _OPENAPI_DESCRIPTION = (
     "on this door. A classify hold files /api/v1/aiuditor/approvals when "
     "AIUDITOR_SERVICE_URL is set; retry resumes or denies from that inbox. "
     "Org policy can allow, hold, or deny by purpose and class. "
-    "Default renter chat does not classify unless the org opts in. "
+    "Every chat request on both doors passes automated safety screening for "
+    "a small set of severe categories. Nothing is stored for a request that "
+    "is not flagged; a flagged request is recorded for operator review and "
+    "allowed or blocked by category (400 content_policy_violation). "
     "Host addresses are not published here. Test chat: https://chat.test.hyperme.sh"
 )
 
@@ -65,6 +74,7 @@ def create_app(
     chat_quota: ChatQuota | None = None,
     classifier: Classifier | None = None,
     approval_inbox: ApprovalInbox | None = None,
+    safety_classifier: SafetyClassifier | None = None,
 ) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -77,6 +87,8 @@ def create_app(
         app.state.chat_quota = chat_quota or resolve_chat_quota()
         app.state.classifier = classifier or resolve_classifier()
         app.state.approval_inbox = resolve_approval_inbox(approval_inbox)
+        app.state.safety_classifier = safety_classifier or resolve_safety_classifier()
+        app.state.safety_recorder = SafetyRecorder()
         if gateway_service_secret is not None:
             app.state.gateway_service_secret = gateway_service_secret
         refresh_s = float(os.environ.get("HYPERMESH_ASSIGNMENT_REFRESH_S", "30"))
@@ -90,6 +102,7 @@ def create_app(
                     app.state.control_plane,
                     app.state.ticket_cache,
                     app.state.meter_queue,
+                    app.state.safety_recorder,
                 )
                 try:
                     await asyncio.wait_for(stop.wait(), timeout=refresh_s)
@@ -177,6 +190,8 @@ def create_app(
         return app.openapi_schema
 
     app.openapi = custom_openapi
+    # Outermost: refuse an oversized body before anything parses it.
+    app.add_middleware(BodyLimitMiddleware)
 
     app.include_router(health_router, prefix="/api/v1")
     app.include_router(version_router)

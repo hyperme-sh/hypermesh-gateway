@@ -2,8 +2,9 @@
 
 Authorized security work on a model they are allowed to use.
 Not a CASB. Not jailbreak-as-a-service. Not marketed as a detector.
-Default Full Model / Your Model chat does not classify or store the
-prompt. This module is for the IR door only.
+This taxonomy is for the IR door only; default chat does not run it.
+Automated safety screening (``safety.py``) is separate and runs on every
+door.
 
 The keyword stub is gone. Classification is a versioned taxonomy pack
 of structured classes + matchers. A later model-backed pack can implement

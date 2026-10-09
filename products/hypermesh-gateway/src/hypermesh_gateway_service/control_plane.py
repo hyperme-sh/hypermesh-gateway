@@ -72,6 +72,8 @@ class ControlPlane(Protocol):
         metric_id: uuid.UUID | None = None,
     ) -> None: ...
 
+    async def post_safety_flag(self, record: Any) -> None: ...
+
 
 class HttpControlPlane:
     def __init__(self, base_url: str, service_secret: str) -> None:
@@ -242,6 +244,19 @@ class HttpControlPlane:
             raise PermissionError("Gateway service credential required")
         response.raise_for_status()
 
+    async def post_safety_flag(self, record: Any) -> None:
+        """One flagged request for operator review. Idempotent on record.id."""
+
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.post(
+                f"{self._base}/api/v1/hypermesh/gateway/safety-flags",
+                headers=self._headers(record.tenant_id),
+                json=record.as_body(),
+            )
+        if response.status_code == 401:
+            raise PermissionError("Gateway service credential required")
+        response.raise_for_status()
+
 
 class FakeControlPlane:
     def __init__(
@@ -264,6 +279,8 @@ class FakeControlPlane:
         self.post_metrics_calls = 0
         self.fail_metrics = False
         self.key_index: list[KeyIndexEntry] = []
+        self.safety_flags: list[Any] = []
+        self.fail_safety_flags = False
 
     async def get_lease(self, tenant_id: uuid.UUID, lease_id: uuid.UUID) -> LeaseView | None:
         self.get_lease_calls += 1
@@ -318,6 +335,12 @@ class FakeControlPlane:
         if metric_id is not None:
             recorded["metric_id"] = metric_id
         self.metrics.append(recorded)
+
+    async def post_safety_flag(self, record: Any) -> None:
+        if self.fail_safety_flags:
+            raise RuntimeError("safety flag plane down")
+        if all(existing.id != record.id for existing in self.safety_flags):
+            self.safety_flags.append(record)
 
 
 def resolve_control_plane(override: ControlPlane | None = None) -> ControlPlane:
