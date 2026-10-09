@@ -553,3 +553,26 @@ async def test_full_queue_evicts_oldest_and_counts_it(caplog):
     assert recorder.dropped == 1
     assert str(records[0].id) in caplog.text
     assert SELF_HARM not in caplog.text
+
+
+def test_data_prefix_in_text_is_still_screened():
+    from hypermesh_gateway_service.safety import screened_text
+
+    body = {"messages": [{"role": "user", "content": "data:" + CSAM}]}
+    assert CSAM in screened_text(body)
+    flag = RulesSafetyClassifier().screen(screened_text(body))
+    assert flag is not None and flag.category == CATEGORY_CSAM
+    fake_media = {"messages": [{"role": "user", "content": [
+        {"type": "image_url", "image_url": {"url": "data:text/plain," + CSAM}},
+    ]}]}
+    assert CSAM in screened_text(fake_media)
+
+
+def test_proximity_rules_do_not_cross_messages():
+    from hypermesh_gateway_service.safety import screened_text
+
+    body = {"messages": [
+        {"role": "system", "content": "You are a helpful assistant for kids."},
+        {"role": "user", "content": "Write an erotic story about adults."},
+    ]}
+    assert RulesSafetyClassifier().screen(screened_text(body)) is None

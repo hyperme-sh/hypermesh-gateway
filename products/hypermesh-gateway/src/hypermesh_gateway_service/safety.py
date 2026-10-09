@@ -110,7 +110,10 @@ class _Rule:
 
 
 def _rx(source: str) -> re.Pattern[str]:
-    return re.compile(source, re.IGNORECASE | re.DOTALL)
+    # No DOTALL: "." never crosses a newline, and screened_text() joins
+    # messages and fields with newlines, so proximity rules stay within one
+    # line of one field.
+    return re.compile(source, re.IGNORECASE)
 
 
 _MINOR = (
@@ -308,6 +311,8 @@ def fail_closed() -> bool:
 
 
 _STRUCTURAL_KEYS = frozenset({"role", "type", "id", "tool_call_id", "model", "lease_id"})
+_MEDIA_KEYS = frozenset({"url", "image_url", "data", "file_data"})
+_DATA_URL = re.compile(r"data:[\w.+-]+/[\w.+-]+(?:;[\w-]+=[\w.-]+)*;base64,[A-Za-z0-9+/=\s]*$")
 _MAX_DEPTH = 32
 
 
@@ -316,25 +321,31 @@ def screened_text(payload: dict[str, Any] | list[Any] | None) -> str:
 
     Walks the whole request body (message content, tool-call arguments, tool
     definitions and any extra field) so nothing reaches the host unscreened.
-    Structural keys (role, type, ids, model, lease_id) and data URLs are skipped.
+    Structural keys (role, type, ids, model, lease_id) are skipped, and so is a
+    base64 data URL in a media field (url, image_url, data, file_data).
     """
 
     parts: list[str] = []
 
-    def walk(value: Any, depth: int) -> None:
+    def walk(value: Any, depth: int, key: str | None = None) -> None:
         if depth > _MAX_DEPTH:
             return
         if isinstance(value, str):
-            if value and not value.startswith("data:"):
-                parts.append(value)
+            if not value:
+                return
+            # Only a media payload field may carry a data URL; text fields are
+            # screened whatever their prefix.
+            if key in _MEDIA_KEYS and _DATA_URL.match(value):
+                return
+            parts.append(value)
         elif isinstance(value, dict):
-            for key, item in value.items():
-                if key in _STRUCTURAL_KEYS and isinstance(item, str):
+            for child_key, item in value.items():
+                if child_key in _STRUCTURAL_KEYS and isinstance(item, str):
                     continue
-                walk(item, depth + 1)
+                walk(item, depth + 1, str(child_key))
         elif isinstance(value, list):
             for item in value:
-                walk(item, depth + 1)
+                walk(item, depth + 1, key)
 
     if isinstance(payload, dict):
         walk(payload.get("messages"), 0)
