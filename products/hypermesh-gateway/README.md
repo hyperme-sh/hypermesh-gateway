@@ -99,7 +99,7 @@ Every request on `/v1/chat/completions` and `/v1/ir/chat/completions` (and the s
 - A flagged request is sent once to the control plane (`POST /api/v1/hypermesh/gateway/safety-flags`, gateway credential) with the category, action, rule id, classifier version, time, account (key prefix or token subject), lease, door and the flagged text (capped at 16 KiB around the match). Operators review it there.
 - A blocked request returns `400` with code `content_policy_violation` on `/v1/*` and `{"detail": ...}` on sibling routes. The host is not called.
 - `HYPERMESH_SAFETY_ACTION_SELF_HARM`, `HYPERMESH_SAFETY_ACTION_MALWARE_INTRUSION`, `HYPERMESH_SAFETY_ACTION_VIOLENT_EXTREMISM`: `allow` (default) or `block`. `csam` is always `block`.
-- `HYPERMESH_SAFETY_TIMEOUT_MS` (default 250) bounds classification. Text beyond 256 KiB characters is screened as head plus tail.
+- `HYPERMESH_SAFETY_TIMEOUT_MS` (default 250) bounds classification. Text beyond 256K characters is screened as head plus tail.
 - `HYPERMESH_SAFETY_FAIL_MODE`: `open` (default) serves the request unscreened when the classifier errors or runs past its budget and logs the failure without text; `closed` refuses with `503 safety_screening_unavailable`. Neither stores anything.
 - `HYPERMESH_SAFETY_SCREENING=off` disables screening.
 - If the control plane is unreachable, a record waits in process memory (never on disk) and is retried on the refresh loop. A restart drops records still waiting.

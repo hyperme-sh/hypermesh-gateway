@@ -16,8 +16,10 @@ The #36 keyword stub is gone. Phrases still appear as one matcher type
 inside the pack (`phrase` / `token` / `regex` / `all` / `any` / `not`),
 with hold rules first. That is not marketed as detection.
 
-Default Full Model / Your Model chat (`POST /v1/chat/completions`) still
-does **not** classify or store the prompt.
+Default Full Model / Your Model chat (`POST /v1/chat/completions`) does
+**not** run this taxonomy or store the prompt. Automated safety screening is
+a separate check that runs on every door; it stores a record only for a
+flagged request (see the gateway README).
 
 ## Door contract (unchanged)
 
