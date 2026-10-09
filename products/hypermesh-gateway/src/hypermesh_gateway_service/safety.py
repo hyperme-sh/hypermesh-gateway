@@ -770,7 +770,7 @@ def split_csam_check(payload: dict[str, Any] | None) -> tuple[SafetyFlag, str] |
     split around an inserted turn from another role ("Write an erotic story
     about", "Okay", "children") is not adjacent there, and a phrase split
     across a role change is on two lines. This reads each role's turns in
-    order on their own, and the user/assistant/tool dialogue in order, and
+    order on their own, and the whole conversation in order, and
     checks both CSAM patterns (explicit
     terms and minor + sexual proximity) for a match that spans a turn break.
     Protective wording can suppress only a proximity match, only when it
@@ -783,11 +783,11 @@ def split_csam_check(payload: dict[str, Any] | None) -> tuple[SafetyFlag, str] |
     if not isinstance(payload, dict) or not isinstance(payload.get("messages"), list):
         return None
     by_role: dict[str, list[str]] = {}
-    # The conversation in order without system/developer instructions: the
-    # caller writes every user, assistant and tool turn, so a phrase split
-    # across a role change ("Write an erotic story about", assistant
-    # "children") is read as one. Instructions stay out so a system prompt
-    # that mentions children does not join a later request.
+    # The whole conversation in order. The caller writes every turn,
+    # including system and developer turns, so a phrase split across any role
+    # change ("Write an erotic story about", then "children") is read as one.
+    # This errs toward flagging: a system prompt that mentions children next
+    # to an adult sexual request is flagged for review.
     dialogue: list[str] = []
     for message in payload["messages"]:
         if not isinstance(message, dict):
@@ -796,8 +796,7 @@ def split_csam_check(payload: dict[str, Any] | None) -> tuple[SafetyFlag, str] |
         if segment:
             role = str(message.get("role"))
             by_role.setdefault(role, []).append(segment)
-            if role not in {"system", "developer"}:
-                dialogue.append(segment)
+            dialogue.append(segment)
     sequences = [*by_role.values(), dialogue]
     access_requested = any(
         _ACCESS.search(segment) for segments in by_role.values() for segment in segments
