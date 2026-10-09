@@ -21,7 +21,7 @@ No host IPs on this page or in public OpenAPI.
 - Panopticon is the broker only: it assigns gateway + host + peer record + lease ticket. This gateway and the host do not negotiate with each other.
 - Learns the #26 signed ticket over HTTPS with `hm_gw_…` (`GET /api/v1/hypermesh/gateway/tickets`) and applies the host peer from `GET /gateway/tunnels`. May POST ready/metrics the same way. No standing session, no WebSocket, no gateway mesh. Service Bus stays domain events, not this hop.
 - Caches the ticket + `client_address` from the tickets pull and verifies with `honor_ticket`. Chat does **not** call Panopticon per completion.
-- Ticket-only chat grant: portal JWT validated locally on this gateway (cached JWKS or API-key exchange JWT — no OIDC dance, no Keycloak token hop) **or** a renter API key (`Authorization: Bearer` or `X-Api-Key`), **plus** a paid, active, signed lease ticket. Ticket HMAC is the grant. Purpose is a field on that ticket (`renter` | `ir` | `service`), not a Keycloak role. The renter chat door accepts `renter` and `service` and rejects `ir`. The opt-in IR door (`/v1/ir/chat/completions`) accepts `ir` only. A versioned taxonomy pack (not the #36 keyword stub, not a detector / CASB) classifies a small set of authorized security prompt types and allow/hold. Default chat does not classify or store the prompt. Integrator note: [docs/ir-classifier-v0.md](docs/ir-classifier-v0.md). Host `device_secret` and gateway `hm_gw_` are not renter credentials. A bearer key is enough: the tenant comes from the fingerprint index. `X-Tenant-ID` and `lease_id` are optional overrides and must match that tenant.
+- Ticket-only chat grant: portal JWT validated locally on this gateway (cached JWKS or API-key exchange JWT — no OIDC dance, no Keycloak token hop) **or** a renter API key (`Authorization: Bearer` or `X-Api-Key`), **plus** a paid, active, signed lease ticket. Ticket HMAC is the grant. Purpose is a field on that ticket (`renter` | `ir` | `service`), not a Keycloak role. The renter chat door accepts `renter` and `service` and rejects `ir`. The opt-in IR door (`/v1/ir/chat/completions`) accepts `ir` only. A versioned taxonomy pack (not the #36 keyword stub, not a detector / CASB) classifies a small set of authorized security prompt types and allow/hold. Default chat does not run that taxonomy and does not store the prompt; see automated safety screening below. Integrator note: [docs/ir-classifier-v0.md](docs/ir-classifier-v0.md). Host `device_secret` and gateway `hm_gw_` are not renter credentials. A bearer key is enough: the tenant comes from the fingerprint index. `X-Tenant-ID` and `lease_id` are optional overrides and must match that tenant.
 - IR receipts stay on this door (`GET /v1/ir/receipts`): who, why, what left, class, allow/hold, time. Customer artifact. Not a Fyber product event. Receipts persist by default (`HYPERMESH_DATA_DIR/ir-receipts.json`, else `var/lib/hypermesh/ir-receipts.json`). Override the file with `HYPERMESH_IR_RECEIPT_PATH`. Set that to `memory` to keep rows in process only. Defined fields only. No prompt bodies on Azure Monitor / Service Bus / `hypermesh.*` events.
 - Fail closed on a revoked ticket, certification not green (`path_b_state`, to be renamed `cert_state`), or WireGuard peer down. Customer-readable chat error stays **instance not ready**. Completions never go to Keycloak or Panopticon.
 - Reports tunnel/session metrics (`bytes_in`, `bytes_out`, `handshake_count`) to Panopticon with `hm_gw_`. No prompt body. Ever. A failed hop queues the counters on this door (`HYPERMESH_METER_QUEUE_PATH`) and retries; chat still returns. The door also rate-limits per lease (`HYPERMESH_CHAT_RATE_LIMIT`) so a caller who skips the edge still hits a ceiling.
@@ -83,6 +83,28 @@ Chat upstream timeout is `httpx.Timeout(connect=10, read=HYPERMESH_CHAT_READ_TIM
 The edge `timeout client` / `timeout server` in front of this process is owned by FyberLabs/infra (HAProxy, infra#130). This repo does not change it. Host llama-server `--jinja` is owned by the host entrypoint, not this door.
 
 `POST /api/v1/internal/touch` on api-keys-service records `last_used_at`, at most once per key per 60s.
+
+## Automated safety screening
+
+Every request on `/v1/chat/completions` and `/v1/ir/chat/completions` (and the sibling routes) is screened in process before it reaches the host (`safety.py`). The screen covers a small set of severe categories:
+
+| Category | `category` | Default action |
+|----------|------------|----------------|
+| Child sexual abuse material | `csam` | block and record (fixed) |
+| Credible self-harm risk | `self_harm` | allow and record |
+| Malware or intrusion tooling aimed at others | `malware_intrusion` | allow and record |
+| Violent extremism or terrorism | `violent_extremism` | allow and record |
+
+- Nothing is stored or sent for a request that is not flagged.
+- A flagged request is sent once to the control plane (`POST /api/v1/hypermesh/gateway/safety-flags`, gateway credential) with the category, action, rule id, classifier version, time, account (key prefix or token subject), lease, door and the flagged text (capped at 16 KiB around the match). Operators review it there.
+- A blocked request returns `400` with code `content_policy_violation` on `/v1/*` and `{"detail": ...}` on sibling routes. The host is not called.
+- `HYPERMESH_SAFETY_ACTION_SELF_HARM`, `HYPERMESH_SAFETY_ACTION_MALWARE_INTRUSION`, `HYPERMESH_SAFETY_ACTION_VIOLENT_EXTREMISM`: `allow` (default) or `block`. `csam` is always `block`.
+- `HYPERMESH_SAFETY_TIMEOUT_MS` (default 250) bounds classification. Text beyond 256 KiB characters is screened as head plus tail.
+- `HYPERMESH_SAFETY_FAIL_MODE`: `open` (default) serves the request unscreened when the classifier errors or runs past its budget and logs the failure without text; `closed` refuses with `503 safety_screening_unavailable`. Neither stores anything.
+- `HYPERMESH_SAFETY_SCREENING=off` disables screening.
+- If the control plane is unreachable, a record waits in process memory (never on disk) and is retried on the refresh loop. A restart drops records still waiting.
+- Request text never goes to logs, metrics, telemetry or events. Log lines carry category, action, classifier version, lease id and record id only.
+- The bundled classifier is a deterministic rules baseline (`safety-rules-v1`). `SafetyClassifier` is the seam for a model classifier later; pass one to `create_app(safety_classifier=...)`.
 
 ## Run locally
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import os
 import uuid
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request, status
@@ -51,6 +52,18 @@ from hypermesh_gateway_service.metrics import (
 from hypermesh_gateway_service.quota import ChatQuota, QuotaExceeded, resolve_chat_quota
 from hypermesh_gateway_service.posture import require_chat_posture
 from hypermesh_gateway_service.receipts import ReceiptStore
+from hypermesh_gateway_service.safety import (
+    BLOCKED_CODE,
+    BLOCKED_MESSAGE,
+    UNAVAILABLE_MESSAGE,
+    SafetyRecord,
+    SafetyRecorder,
+    record_excerpt,
+    resolve_safety_classifier,
+    screen_request,
+    screened_text,
+    screening_enabled,
+)
 from hypermesh_gateway_service.renter_auth import (
     RenterGrant,
     confirm_api_key_live,
@@ -149,6 +162,76 @@ def _classifier(request: Request):
     return resolved
 
 
+def _safety_classifier(request: Request):
+    existing = getattr(request.app.state, "safety_classifier", None)
+    if existing is None:
+        existing = resolve_safety_classifier()
+        request.app.state.safety_classifier = existing
+    return existing
+
+
+def _safety_recorder(request: Request) -> SafetyRecorder:
+    existing = getattr(request.app.state, "safety_recorder", None)
+    if existing is None:
+        existing = SafetyRecorder()
+        request.app.state.safety_recorder = existing
+    return existing
+
+
+async def _screen(
+    request: Request,
+    body: ChatCompletionRequest,
+    *,
+    tenant_id: uuid.UUID,
+    lease_id: uuid.UUID,
+    subject: str,
+    door: str,
+) -> None:
+    """Automated safety screening. Raises DoorError when the request is blocked.
+
+    Stores nothing for an unflagged request. Never logs the request text.
+    """
+
+    if not screening_enabled():
+        return
+    text = screened_text(body.messages)
+    if not text:
+        return
+    classifier = _safety_classifier(request)
+    outcome = await screen_request(classifier, text, lease_id=lease_id)
+    if outcome.failed:
+        if outcome.action == "block":
+            raise DoorError(503, UNAVAILABLE_MESSAGE, "safety_screening_unavailable")
+        return
+    flag = outcome.flag
+    if flag is None:
+        return
+    record = SafetyRecord(
+        id=uuid.uuid4(),
+        tenant_id=tenant_id,
+        lease_id=lease_id,
+        subject=subject,
+        category=flag.category,
+        action=outcome.action,
+        rule_id=flag.rule_id,
+        classifier_version=flag.classifier_version,
+        door=door,
+        flagged_text=record_excerpt(text, flag.match_start),
+        occurred_at=datetime.now(UTC),
+    )
+    logger.warning(
+        "safety screening flagged lease=%s category=%s action=%s version=%s record=%s",
+        lease_id,
+        flag.category,
+        outcome.action,
+        flag.classifier_version,
+        record.id,
+    )
+    await _safety_recorder(request).record(_control(request), record)
+    if outcome.action == "block":
+        raise DoorError(400, BLOCKED_MESSAGE, BLOCKED_CODE)
+
+
 def _inbox(request: Request) -> ApprovalInbox:
     existing = getattr(request.app.state, "approval_inbox", None)
     if existing is not None:
@@ -233,12 +316,13 @@ async def refresh_known_tenants(
     plane: ControlPlane,
     cache: TicketCache,
     queue: MeterQueue | None = None,
+    safety: SafetyRecorder | None = None,
 ) -> None:
     """Background hop. Pull tickets, then apply pending allocated host peers.
 
     Chat still uses the cache if Panopticon is quiet. Apply is add-once
     (one WG peer per host); it does not drop a peer on lease_stop.
-    A quiet plane still retries queued usage on this hop.
+    A quiet plane still retries queued usage and safety records on this hop.
     """
 
     list_index = getattr(plane, "list_key_index", None)
@@ -258,6 +342,8 @@ async def refresh_known_tenants(
             logger.info("assignment refresh skipped")
     if queue is not None:
         await flush_meter_queue(plane, queue)
+    if safety is not None and safety.pending:
+        await safety.flush(plane)
 
 
 async def _pull_assignments(request: Request, tenant_id: uuid.UUID) -> list[GatewayTunnel]:
@@ -696,6 +782,9 @@ async def _chat(request: Request, body: ChatCompletionRequest) -> StreamingRespo
         raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
     _bind_renter_to_ticket(request, grant, claims, tenant_id, cache)
     _require_door_capacity(request, lease_id)
+    await _screen(
+        request, body, tenant_id=tenant_id, lease_id=lease_id, subject=grant.subject, door="chat"
+    )
     purpose = claims.purpose
     policies = await _load_policies(request, tenant_id, purpose=purpose)
     if policies:
@@ -903,6 +992,9 @@ async def _ir_chat(request: Request, body: ChatCompletionRequest):
         raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
     _bind_auditor_to_ticket(request, grant, claims, tenant_id, cache)
     _require_door_capacity(request, lease_id)
+    await _screen(
+        request, body, tenant_id=tenant_id, lease_id=lease_id, subject=grant.subject, door="ir"
+    )
     from hypermesh_gateway_service.classify import prompt_text_from_messages
 
     classified = _classifier(request).classify(prompt_text_from_messages(body.messages))
