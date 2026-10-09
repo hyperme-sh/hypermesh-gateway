@@ -392,6 +392,16 @@ def screening_enabled() -> bool:
     return raw not in {"0", "off", "false", "no", "disabled"}
 
 
+def blocking_rules() -> list[_Rule]:
+    """Rules of every non-CSAM category whose configured action is ``block``."""
+
+    return [
+        rule
+        for rule in _RULES
+        if rule.category != CATEGORY_CSAM and category_action(rule.category) == "block"
+    ]
+
+
 def category_action(category: str) -> Action:
     if category in FIXED_BLOCK:
         return "block"
@@ -429,7 +439,8 @@ def _structural_value(key: object, value: object) -> bool:
     The key name alone is not enough: extras may nest a ``role`` or ``id`` key
     anywhere. A role must be a real chat role; any other structural value must
     be a single identifier (no spaces) that, read with its separators as
-    spaces, matches neither CSAM pattern. Anything else is screened.
+    spaces, matches neither CSAM pattern nor any rule of a category whose
+    configured action is ``block``. Anything else is screened.
     """
 
     if key not in _STRUCTURAL_KEYS or not isinstance(value, str):
@@ -439,10 +450,10 @@ def _structural_value(key: object, value: object) -> bool:
     if not _IDENTIFIER.fullmatch(value):
         return False
     spaced = _IDENTIFIER_PUNCT.sub(" ", value)
+    patterns = [_CSAM_NAMED, _CSAM_MINOR_SEXUAL]
+    patterns += [rule.pattern for rule in blocking_rules()]
     return not any(
-        pattern.search(candidate)
-        for pattern in (_CSAM_NAMED, _CSAM_MINOR_SEXUAL)
-        for candidate in (value, spaced)
+        pattern.search(candidate) for pattern in patterns for candidate in (value, spaced)
     )
 
 _MEDIA_KEYS = frozenset({"url", "image_url", "data", "file_data"})
@@ -908,11 +919,14 @@ def screen_pool() -> ScreenPool:
         return _POOL
 
 
-def csam_fallback(text: str) -> SafetyFlag | None:
-    """CSAM patterns run inline when the classifier cannot finish.
+def blocking_fallback(text: str) -> SafetyFlag | None:
+    """Blocking rules run inline when the classifier cannot finish.
 
-    No protective wording is honoured here: when screening failed, a CSAM
-    pattern match is blocked and recorded.
+    First the CSAM patterns, with no protective wording honoured (rule
+    ``csam.fallback``); then the rules of every other category whose
+    configured action is ``block`` (rule ``<rule>.fallback``), on a line and
+    across line breaks. When screening failed, a match is blocked and
+    recorded whatever the fail mode.
     """
 
     for pattern in (_CSAM_NAMED, _CSAM_MINOR_SEXUAL):
@@ -922,7 +936,19 @@ def csam_fallback(text: str) -> SafetyFlag | None:
     start = _straddling_csam(text)
     if start is not None:
         return SafetyFlag(CATEGORY_CSAM, FALLBACK_RULE_ID, RULES_VERSION, start)
+    rules = blocking_rules()
+    for rule in rules:
+        match = rule.pattern.search(text)
+        if match is None:
+            match = _straddle(text, rule.pattern)
+        if match is not None:
+            return SafetyFlag(
+                rule.category, f"{rule.rule_id}.fallback", RULES_VERSION, match.start()
+            )
     return None
+
+
+csam_fallback = blocking_fallback
 
 
 async def screen_request(
@@ -935,8 +961,8 @@ async def screen_request(
     """Screen within the time budget on the bounded pool.
 
     When the classifier errors, overruns its budget or finds every worker
-    busy, the CSAM patterns still run inline: a match is blocked and recorded
-    whatever the fail mode. Otherwise HYPERMESH_SAFETY_FAIL_MODE applies
+    busy, the CSAM patterns and the rules of every category set to block
+    still run inline: a match is blocked and recorded whatever the fail mode. Otherwise HYPERMESH_SAFETY_FAIL_MODE applies
     (open serves unscreened, closed refuses with 503).
     """
 
@@ -957,7 +983,7 @@ async def screen_request(
             type(exc).__name__,
             "closed" if closed else "open",
         )
-        fallback = csam_fallback(text)
+        fallback = blocking_fallback(text)
         if fallback is not None:
             return ScreenOutcome(flag=fallback, action="block")
         return ScreenOutcome(flag=None, action="block" if closed else "allow", failed=True)
@@ -1021,11 +1047,7 @@ def split_csam_check(
     access_requested = _ACCESS.search(screened or "") is not None or any(
         _ACCESS.search(segment) for segment in dialogue
     )
-    blocking_rules = [
-        rule
-        for rule in _RULES
-        if rule.category != CATEGORY_CSAM and category_action(rule.category) == "block"
-    ]
+    blocking = blocking_rules()
     for segments in sequences:
         if len(segments) < 2:
             continue
@@ -1046,7 +1068,7 @@ def split_csam_check(
                 found = (CATEGORY_CSAM, SPLIT_RULE_ID, match.start())
                 break
         if found is None:
-            for rule in blocking_rules:
+            for rule in blocking:
                 match = _straddle(text, rule.pattern)
                 if match is not None:
                     found = (rule.category, f"{rule.rule_id}.split", match.start())
