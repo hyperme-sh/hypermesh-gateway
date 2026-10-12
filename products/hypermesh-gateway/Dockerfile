@@ -24,6 +24,10 @@ ARG CONTROLPLANE_SERVICEBUS=0
 RUN uv sync --frozen --no-dev --package hypermesh-gateway-service \
  && if [ "$CONTROLPLANE_SERVICEBUS" = "1" ]; then uv pip install --python /app/.venv 'azure-servicebus>=7.12.0'; fi
 ENV PYTHONPATH=/app/core/lib/controlplane-core/src:/app/core/lib/controlplane-db/src:/app/core/events/src:/app/products/hypermesh-gateway/src
+# Import the service app in the built image. A workspace package that the
+# service imports but its pyproject does not declare is never installed here,
+# so the import fails now and the image is not published.
+RUN /app/.venv/bin/python -c "import hypermesh_gateway_service.app"
 # GIT_SHA and BUILT_AT identify this image. Below the venv layer so a new
 # commit does not reinstall dependencies. imagetools carry keeps these
 # values. /version reports this build, not the deploy tag.
