@@ -16,6 +16,9 @@ LABEL com.fyberlabs.alembic-head="${ALEMBIC_HEAD}"
 COPY core/events ./core/events
 COPY core/lib/controlplane-api ./core/lib/controlplane-api
 COPY core/lib/controlplane-core ./core/lib/controlplane-core
+# uv validates the parent workspace member even when only its contract is installed.
+COPY core/user-service/pyproject.toml ./core/user-service/pyproject.toml
+COPY core/user-service/contracts ./core/user-service/contracts
 COPY core/lib/controlplane-identity ./core/lib/controlplane-identity
 COPY core/lib/controlplane-tenancy ./core/lib/controlplane-tenancy
 COPY products/hypermesh-ticket ./products/hypermesh-ticket
