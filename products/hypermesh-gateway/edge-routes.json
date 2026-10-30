@@ -1,0 +1,6 @@
+{
+  "schema_version": 1,
+  "product": "hypermesh-gateway",
+  "edge_routes": [],
+  "exposure": "Served outside the control-plane reverse proxy."
+}
