@@ -72,3 +72,40 @@ def test_renter_key_fingerprint_is_hex_of_full_key():
         "pk_test.other"
     )
     assert len(renter_key_fingerprint("pk_test.renter-key")) == 64
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("door", ["/v1/chat/completions", "/v1/ir/chat/completions"])
+@pytest.mark.parametrize("authorization", ["Bearer approved-user.forged", "Bearer portal.jwt.token", "Basic invalid", ""])
+async def test_dual_credentials_rejected_before_approval_or_proxy(
+    http_client, tenant_headers, app, tenant_id, monkeypatch, door, authorization
+):
+    import hypermesh_gateway_service.routes as routes
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("ambiguous credentials must not reach approval or proxy")
+
+    monkeypatch.setattr(routes, "_hold_or_resume", forbidden)
+    monkeypatch.setattr(routes, "proxy_chat", forbidden)
+    lease_id = uuid.uuid4()
+    app.state.ticket_cache.put(tenant_id, _signed_ticket(lease_id))
+    response = await http_client.post(
+        door,
+        headers={**tenant_headers, "Authorization": authorization,
+                 "X-Api-Key": "pk_test.ir-key" if "/ir/" in door else "pk_test.renter-key"},
+        json={"lease_id": str(lease_id), "messages": [{"role": "user", "content": "hi"}]},
+    )
+    assert response.status_code == 401, response.text
+
+
+@pytest.mark.parametrize("extractor", ["require_renter_grant", "presented_renter_key"])
+def test_both_credential_consumers_reject_dual_headers(extractor):
+    from starlette.requests import Request
+    from hypermesh_gateway_service import renter_auth
+
+    request = Request({"type": "http", "headers": [
+        (b"authorization", b"Bearer approved-user.forged"),
+        (b"x-api-key", b"pk_test.renter-key"),
+    ]})
+    with pytest.raises(renter_auth.RenterUnauthorized):
+        getattr(renter_auth, extractor)(request)

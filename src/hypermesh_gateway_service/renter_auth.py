@@ -93,6 +93,13 @@ def _api_key_header(request: Request) -> str | None:
     return raw.strip()
 
 
+def _reject_ambiguous_credentials(request: Request) -> None:
+    # Reject even malformed/empty dual headers: never derive a subject from
+    # one credential and authorize it using another credential.
+    if "Authorization" in request.headers and "X-Api-Key" in request.headers:
+        raise RenterUnauthorized()
+
+
 def _forbidden_identity(token: str) -> bool:
     return token.startswith((GATEWAY_SECRET_HEAD, DEVICE_SECRET_HEAD, SITE_TOKEN_HEAD, TICKET_PREFIX))
 
@@ -192,6 +199,7 @@ def require_renter_grant(request: Request, *, bind_tenant_header: bool = True) -
     answer 403 tenant_mismatch. The default still rejects a mismatched header.
     """
 
+    _reject_ambiguous_credentials(request)
     bearer = _bearer(request)
     header_key = _api_key_header(request)
     tenant_hdr = request.headers.get("X-Tenant-ID") if bind_tenant_header else None
@@ -218,6 +226,7 @@ def require_renter_grant(request: Request, *, bind_tenant_header: bool = True) -
 
 
 def presented_renter_key(request: Request) -> str | None:
+    _reject_ambiguous_credentials(request)
     header_key = _api_key_header(request)
     if header_key and looks_like_api_key(header_key) and not _forbidden_identity(header_key):
         return header_key

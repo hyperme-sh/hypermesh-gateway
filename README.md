@@ -15,6 +15,9 @@ Health is `/api/v1/health/`; version is `/version`; OpenAPI is `/openapi.json`.
 `edge-routes.json` describes the routing contract. Authentication, tenant binding,
 lease purpose, ticket expiry/revocation and host admission checks remain required.
 Safety screening and request-body limits apply before forwarding.
+Supply exactly one credential header: `Authorization` or `X-Api-Key`. Requests
+containing both are rejected before authorization or approval lookup, including
+when one header is empty or malformed.
 
 ## Development
 
