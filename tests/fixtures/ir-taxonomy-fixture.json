@@ -1,0 +1,33 @@
+{
+  "version": "ir-taxonomy-fixture",
+  "description": "Hermetic fixture pack. Not shipped. No live model.",
+  "default": {
+    "class": "out_of_scope",
+    "disposition": "hold"
+  },
+  "classes": [
+    {
+      "id": "policy_review",
+      "disposition": "allow",
+      "label": "Policy review"
+    },
+    {
+      "id": "out_of_scope",
+      "disposition": "hold",
+      "label": "Out of scope"
+    }
+  ],
+  "rules": [
+    {
+      "id": "allow.fixture_policy",
+      "class": "policy_review",
+      "priority": 10,
+      "match": {
+        "all": [
+          {"token": "soc"},
+          {"token": "control"}
+        ]
+      }
+    }
+  ]
+}

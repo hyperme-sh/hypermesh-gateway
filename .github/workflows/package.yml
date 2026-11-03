@@ -1,0 +1,48 @@
+name: Standalone package
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  package:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2
+        with:
+          version: '0.11.26'
+          python-version: '3.13'
+      - name: Validate Hypermesh gateway package
+        env:
+          DEPENDENCY_READ_TOKEN: ${{ secrets.DEPENDENCY_READ_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$DEPENDENCY_READ_TOKEN" || { echo 'Private dependency read access is required'; exit 1; }
+          header=$(printf 'x-access-token:%s' "$DEPENDENCY_READ_TOKEN" | base64 -w0)
+          echo "::add-mask::$header"
+          export GIT_CONFIG_COUNT=8
+          export GIT_CONFIG_KEY_0=http.https://github.com/hyperme-sh/controlplane-api.git.extraheader
+          export GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $header"
+          export GIT_CONFIG_KEY_1=http.https://github.com/hyperme-sh/controlplane-tenancy.git.extraheader
+          export GIT_CONFIG_VALUE_1="AUTHORIZATION: basic $header"
+          export GIT_CONFIG_KEY_2=http.https://github.com/hyperme-sh/controlplane-identity.git.extraheader
+          export GIT_CONFIG_VALUE_2="AUTHORIZATION: basic $header"
+          export GIT_CONFIG_KEY_3=http.https://github.com/hyperme-sh/controlplane-db.git.extraheader
+          export GIT_CONFIG_VALUE_3="AUTHORIZATION: basic $header"
+          export GIT_CONFIG_KEY_4=http.https://github.com/hyperme-sh/controlplane-events.git.extraheader
+          export GIT_CONFIG_VALUE_4="AUTHORIZATION: basic $header"
+          export GIT_CONFIG_KEY_5=http.https://github.com/hyperme-sh/user-service.git.extraheader
+          export GIT_CONFIG_VALUE_5="AUTHORIZATION: basic $header"
+          export GIT_CONFIG_KEY_6=http.https://github.com/hyperme-sh/controlplane-core.git.extraheader
+          export GIT_CONFIG_VALUE_6="AUTHORIZATION: basic $header"
+          export GIT_CONFIG_KEY_7=http.https://github.com/hyperme-sh/hypermesh-ticket.git.extraheader
+          export GIT_CONFIG_VALUE_7="AUTHORIZATION: basic $header"
+          unset DEPENDENCY_READ_TOKEN
+          bash scripts/check-package.sh
