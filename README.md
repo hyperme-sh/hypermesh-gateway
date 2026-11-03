@@ -1,19 +1,41 @@
-# hypermesh-gateway
+# Hypermesh gateway
 
-Private component extraction from `FyberLabs/panopticon`.
+Ticket-authorized renter chat and WireGuard gateway. Package
+`hypermesh-gateway-service` 0.1.0; factory
+`hypermesh_gateway_service.app.create_app`; entry point
+`python -m hypermesh_gateway_service.main`.
 
-Source commit: `2d92d13f38d491c298631b9b9296979c1fbadd19`.
+The control plane assigns gateway/host peers and signed lease tickets. This
+service caches and validates tickets, applies configured peer updates and proxies
+authorized chat requests to the assigned host. Ticket contracts come from the
+separate `hypermesh-ticket` package; no control-plane service internals are copied.
+The bundled IR taxonomy JSON is included in both distributions.
 
-Retained paths:
+Health is `/api/v1/health/`; version is `/version`; OpenAPI is `/openapi.json`.
+`edge-routes.json` describes the routing contract. Authentication, tenant binding,
+lease purpose, ticket expiry/revocation and host admission checks remain required.
+Safety screening and request-body limits apply before forwarding.
 
-- `products/hypermesh-gateway`
+## Development
 
-The import retains selected-path Git history and verifies every retained blob and
-file mode against that exact source. Rename predecessor paths are not followed.
-Source paths stay in their original layout for review. See `EXTRACTION.json`.
+Use Python 3.13 and uv 0.11.26 with read access to the eight pinned private
+repositories named in `.github/workflows/package.yml`.
 
-This is a history import, not a standalone release or runtime cutover. Dependency
-closure, workspace/lock configuration, compatibility packages, contract snapshots,
-CI/runner eligibility and destination-specific credentials must be reviewed before
-adoption. Actions remain disabled. No credential, deployment ref or runtime is
-copied or switched; the original monorepo remains intact.
+    uv sync --frozen
+    bash scripts/check-package.sh
+
+Checks run source tests, a normally installed wheel outside the checkout, and a
+rebuilt source distribution. Wheel runtime and bundled resource bytes must match
+source. Tests use fake control planes, mocked HTTP hosts and mocked command
+execution; they do not qualify real WireGuard, host enrollment, upstream model
+serving, deployment or consumer cutover.
+
+For isolated development keep `HYPERMESH_WG_APPLY=0` and
+`HYPERMESH_ASSIGNMENT_REFRESH_S=0`; inject a fake control plane. Real operation
+requires explicitly configured gateway credentials, ticket signing trust,
+control-plane access and host networking. Never reuse test credentials.
+
+The main-only hosted workflow uses pinned actions, read-only contents and exact
+repository credential headers. Actions remains disabled pending scoped
+`DEPENDENCY_READ_TOKEN` access and hosted-worker policy. Standalone container and
+network integration need separate qualification before deployment.

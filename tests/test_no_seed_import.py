@@ -7,9 +7,10 @@ import importlib
 import sys
 from pathlib import Path
 
-ROUTER_ROOT = Path(__file__).resolve().parents[1]
-ROUTER_SRC = ROUTER_ROOT / "src" / "hypermesh_gateway_service"
-ROUTER_DOCKERFILE = ROUTER_ROOT / "Dockerfile"
+import hypermesh_gateway_service
+from importlib.metadata import requires
+
+ROUTER_SRC = Path(hypermesh_gateway_service.__file__).resolve().parent
 
 
 def _service_import_hits(path: Path) -> list[str]:
@@ -31,17 +32,17 @@ def _service_import_hits(path: Path) -> list[str]:
 
 def test_gateway_runtime_source_does_not_import_hypermesh_service():
     offenders: list[str] = []
-    for path in ROUTER_SRC.rglob("*.py"):
+    paths = list(ROUTER_SRC.rglob("*.py"))
+    assert paths, "runtime source inventory must not be empty"
+    for path in paths:
         offenders.extend(_service_import_hits(path))
     assert offenders == [], f"gateway image does not ship Hypermesh service files: {offenders}"
 
 
-def test_gateway_dockerfile_does_not_copy_hypermesh_service_seed():
-    text = ROUTER_DOCKERFILE.read_text()
-    assert "hypermesh_service/seed.py" not in text
-    assert "hypermesh_service/ticket.py" not in text
-    assert "COPY products/hypermesh " not in text
-    assert "COPY products/hypermesh-ticket " in text
+def test_gateway_package_declares_ticket_contract_without_service_dependency():
+    dependencies = requires("hypermesh-gateway-service") or []
+    assert any(item.startswith("hypermesh-ticket @") for item in dependencies)
+    assert not any(item.startswith("hypermesh-service") for item in dependencies)
 
 
 def test_routes_reload_does_not_load_hypermesh_service_seed():
