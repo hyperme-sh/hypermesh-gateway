@@ -342,7 +342,7 @@ async def refresh_known_tenants(
 ) -> None:
     """Background hop. Pull tickets, then apply pending allocated host peers.
 
-    Chat still uses the cache if (s)panopticon is quiet. Apply is add-once
+    Chat still uses the cache if spanopticon is quiet. Apply is add-once
     (one WG peer per host); it does not drop a peer on lease_stop.
     A quiet plane still retries queued usage and safety records on this hop.
     """

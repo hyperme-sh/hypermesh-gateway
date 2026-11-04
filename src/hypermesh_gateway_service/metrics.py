@@ -1,4 +1,4 @@
-"""Tunnel/session metrics to (s)panopticon. No prompt body. Ever.
+"""Tunnel/session metrics to spanopticon. No prompt body. Ever.
 
 Completions stay on this gateway. Control plane gets ids and counters only.
 A failed hop queues the counters on this door and retries. Chat still

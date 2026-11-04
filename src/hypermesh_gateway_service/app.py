@@ -48,7 +48,7 @@ _OPENAPI_DESCRIPTION = (
     "Hypermesh / Hyperme.sh Fyber gateway. Proxies renter chat to a leased "
     "instance over the standing WireGuard peer. Chat requires a locally "
     "verified portal JWT or a renter API key, plus a paid active ticket. "
-    "After the ticket is issued, chat does not call (s)panopticon or Keycloak. "
+    "After the ticket is issued, chat does not call spanopticon or Keycloak. "
     "Opt-in IR door at /v1/ir/chat/completions classifies a small set "
     "(versioned taxonomy pack, not a detector) and holds a customer receipt "
     "on this door. A classify hold files /api/v1/aiuditor/approvals when "
@@ -123,7 +123,7 @@ def create_app(
 
     app = FastAPI(
         lifespan=lifespan,
-        title="(s)panopticon Hypermesh Router",
+        title="spanopticon Hypermesh Router",
         description=_OPENAPI_DESCRIPTION,
         version="0.1.0",
     )
