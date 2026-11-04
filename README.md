@@ -38,7 +38,7 @@ For isolated development keep `HYPERMESH_WG_APPLY=0` and
 requires explicitly configured gateway credentials, ticket signing trust,
 control-plane access and host networking. Never reuse test credentials.
 
-The main-only hosted workflow uses pinned actions, read-only contents and exact
+The main-only shared-runner workflow uses pinned actions, read-only contents and exact
 repository credential headers. Actions remains disabled pending scoped
-`DEPENDENCY_READ_TOKEN` access and hosted-worker policy. Standalone container and
+`DEPENDENCY_READ_TOKEN` access and shared-runner qualification. Standalone container and
 network integration need separate qualification before deployment.

@@ -8,7 +8,9 @@ permissions:
 jobs:
   package:
     if: github.ref == 'refs/heads/main'
-    runs-on: ubuntu-24.04
+    runs-on:
+      group: shared-local
+      labels: [self-hosted, linux, x64]
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
