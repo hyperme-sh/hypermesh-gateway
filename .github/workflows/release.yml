@@ -23,7 +23,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Publish or promote exact tested artifacts
-        uses: hyperme-sh/.github/actions/release-channel@3352fb1347e7920ec1d5cd14792ba3038a81abcb
+        uses: hyperme-sh/.github/actions/release-channel@7749591fccd30d46ba9b0adabe82114001c9d0de
         with:
           workflow: .github/workflows/package.yml
           token: ${{ github.token }}
