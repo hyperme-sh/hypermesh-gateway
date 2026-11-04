@@ -1,0 +1,32 @@
+name: Package release channels
+on:
+  workflow_run:
+    workflows: ["Standalone package"]
+    types: [completed]
+    branches: [main]
+  push:
+    tags: ['v*']
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: package-release-${{ github.event.workflow_run.head_sha || github.ref }}
+  cancel-in-progress: false
+jobs:
+  publish:
+    permissions:
+      contents: write
+      actions: read
+    if: >-
+      github.event_name == 'push' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_branch == 'main')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Publish or promote exact tested artifacts
+        uses: hyperme-sh/.github/actions/release-channel@7749591fccd30d46ba9b0adabe82114001c9d0de
+        with:
+          workflow: .github/workflows/package.yml
+          token: ${{ github.token }}
