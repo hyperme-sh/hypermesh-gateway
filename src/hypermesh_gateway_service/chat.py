@@ -1,7 +1,7 @@
 """OpenAI-shaped renter chat proxy. Never log prompts or keys.
 
 Chat path is renter HTTPS → this gateway → the host over the standing
-WireGuard peer. No (s)panopticon HTTP, no get_lease, no Service Bus.
+WireGuard peer. No spanopticon HTTP, no get_lease, no Service Bus.
 
 The door streams the host body. It does not buffer response.json().
 """

@@ -5,7 +5,7 @@ wg-hm iface still receives the peer. Do not add or drop a peer on
 lease_start or lease_stop. remove_peer is host teardown only (failed certification /
 device revoke).
 
-(s)panopticon assigns keys. This process holds the gateway private key and
+spanopticon assigns keys. This process holds the gateway private key and
 calls `wg` / `ip` (CAP_NET_ADMIN, /dev/net/tun). Missing tun is a no-op
 so unit tests and hosts without a kernel tun do not crash.
 """
