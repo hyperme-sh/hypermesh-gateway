@@ -6,7 +6,7 @@ root = Path(__file__).resolve().parents[1]
 expected = {p.relative_to(root / 'src').as_posix(): p.read_bytes()
             for p in (root / 'src').rglob('*')
             if p.is_file() and '__pycache__' not in p.parts}
-resource = root / 'proto/panopticon/v1/contractecho.proto'
+resource = root / 'proto/spanopticon/v1/contractecho.proto'
 if resource.exists():
     expected['controlplane_proto_data/contractecho.proto'] = resource.read_bytes()
 wheel, = Path(sys.argv[1]).glob('*.whl')

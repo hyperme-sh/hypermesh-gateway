@@ -8,15 +8,15 @@ version = "0.1.0"
 requires-python = ">=3.13"
 description = "Hypermesh gateway: ticket-authorized chat routing and WireGuard peer management"
 dependencies = [
-    "hypermesh-ticket @ git+https://github.com/hyperme-sh/hypermesh-ticket.git@c4df1b01b8334c8a17d412a11903df71983dfed9",
+    "hypermesh-ticket @ git+https://github.com/hyperme-sh/hypermesh-ticket.git@b62224be15665abb864d0dfd660fc558fb78b23f",
     "httpx>=0.28.0",
     "cryptography>=44.0.0",
-    "controlplane-api @ git+https://github.com/hyperme-sh/controlplane-api.git@de01a06c0cc4661529442fb77be100ab3d26faab",
-    "controlplane-tenancy @ git+https://github.com/hyperme-sh/controlplane-tenancy.git@6515b0ef67e0d3a6318ac0125c3da10a57146142",
-    "controlplane-identity @ git+https://github.com/hyperme-sh/controlplane-identity.git@76f70a942f7c5e7ab57e47541044978e6bae13e5",
-    "controlplane-core @ git+https://github.com/hyperme-sh/controlplane-core.git@ab482c75d225a0988cf3f6895b2012a7cc5d3066",
-    "controlplane-db @ git+https://github.com/hyperme-sh/controlplane-db.git@b26ab470c1f5de5840d0dbaeaacffed79b02a83c",
-    "controlplane-events @ git+https://github.com/hyperme-sh/controlplane-events.git@ede5ef3203f1910856828a058b42b0ee4edf4dda",
+    "controlplane-api @ git+https://github.com/hyperme-sh/controlplane-api.git@edac59b2cc55923c983a11a451c4bed9ce53edef",
+    "controlplane-tenancy @ git+https://github.com/hyperme-sh/controlplane-tenancy.git@447f779e5cc7f1a30f518434f42fcd2ccbadcb19",
+    "controlplane-identity @ git+https://github.com/hyperme-sh/controlplane-identity.git@5675e7b617db705a7b0caf25f2d65d8a492f32b1",
+    "controlplane-core @ git+https://github.com/hyperme-sh/controlplane-core.git@b9af19a4fb5cd68c7ce746b621347ea3b2e5015b",
+    "controlplane-db @ git+https://github.com/hyperme-sh/controlplane-db.git@17e8c60bc2fea5af890299624ec97e1e7148b2a2",
+    "controlplane-events @ git+https://github.com/hyperme-sh/controlplane-events.git@d8bc887460c08f30c6a1dcb951bac042bad326a7",
 ]
 
 [dependency-groups]

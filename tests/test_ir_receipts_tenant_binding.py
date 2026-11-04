@@ -14,7 +14,7 @@ import pytest
 from conftest import stub_api_key_validator
 from hypermesh_gateway_service.receipts import ReceiptStore
 
-TENANT_CLAIM = "https://panopticon.dev/tenant_id"
+TENANT_CLAIM = "https://spanopticon.dev/tenant_id"
 
 
 def _store(app) -> ReceiptStore:
