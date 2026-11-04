@@ -13,6 +13,8 @@ jobs:
       labels: [self-hosted, linux, x64]
     timeout-minutes: 15
     steps:
+      - name: Prepare release output
+        run: echo "RELEASE_ARTIFACT_DIR=$(mktemp -d "$RUNNER_TEMP/release-dist.XXXXXX")" >> "$GITHUB_ENV"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
@@ -48,3 +50,12 @@ jobs:
           export GIT_CONFIG_VALUE_7="AUTHORIZATION: basic $header"
           unset DEPENDENCY_READ_TOKEN
           bash scripts/check-package.sh
+      - name: Retain validated package bytes
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: tested-dist
+          path: ${{ env.RELEASE_ARTIFACT_DIR }}/*
+          if-no-files-found: error
+          retention-days: 90
+          compression-level: 0
