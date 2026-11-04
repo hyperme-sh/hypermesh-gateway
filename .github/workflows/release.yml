@@ -7,13 +7,16 @@ on:
   push:
     tags: ['v*']
 permissions:
-  contents: write
+  contents: read
   actions: read
 concurrency:
   group: package-release-${{ github.event.workflow_run.head_sha || github.ref }}
   cancel-in-progress: false
 jobs:
   publish:
+    permissions:
+      contents: write
+      actions: read
     if: >-
       github.event_name == 'push' ||
       (github.event.workflow_run.conclusion == 'success' &&
