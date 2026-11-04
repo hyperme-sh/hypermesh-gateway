@@ -1,4 +1,4 @@
-"""HTTPS hop to Panopticon with hm_gw_. Pull tickets/tunnels, post metrics.
+"""HTTPS hop to (s)panopticon with hm_gw_. Pull tickets/tunnels, post metrics.
 
 This is not the chat path. After a ticket is issued, chat uses the cached
 signed ticket and the standing WG peer. No WebSocket, no gateway mesh.

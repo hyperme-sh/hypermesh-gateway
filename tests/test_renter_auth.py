@@ -48,7 +48,7 @@ class _AcceptJwt:
             raise InvalidTokenError("rejected")
         claims: dict[str, object] = {"sub": "portal-user", "azp": "controlplane-frontend"}
         if self.tenant_id is not None:
-            claims["https://panopticon.dev/tenant_id"] = str(self.tenant_id)
+            claims["https://spanopticon.dev/tenant_id"] = str(self.tenant_id)
         if self.roles:
             claims["realm_access"] = {"roles": list(self.roles)}
             claims["groups"] = list(self.roles)
@@ -108,8 +108,8 @@ def test_verify_jwt_locally_honors_exchange_jwt(tenant_id):
     )
     claims = verify_jwt_locally(token)
     assert claims is not None
-    assert claims["panopticon_auth"] == "api_key"
-    assert claims["https://panopticon.dev/tenant_id"] == str(tenant_id)
+    assert claims["spanopticon_auth"] == "api_key"
+    assert claims["https://spanopticon.dev/tenant_id"] == str(tenant_id)
 
 
 def test_verify_jwt_locally_uses_cached_jwks_not_token_endpoint(monkeypatch):

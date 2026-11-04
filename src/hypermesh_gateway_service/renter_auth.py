@@ -3,7 +3,7 @@
 Portal humans: OIDC JWT validated locally (cached JWKS, or the API-key
 exchange JWT). Agents: API key. A paid, active, signed lease ticket is
 still required. Purpose lives on that ticket, not here. Completions do
-not call Keycloak or Panopticon. Not an IdP. Not a fourth identity:
+not call Keycloak or (s)panopticon. Not an IdP. Not a fourth identity:
 renter key / JWT, host device_secret, gateway hm_gw_, or site hm_site_.
 
 API key format is only the first parse. Chat then binds the credential to the
@@ -35,7 +35,7 @@ SITE_TOKEN_HEAD = "hm_site_"
 TICKET_PREFIX = "hm1."
 RENTER_AUTH_REQUIRED = "API key or access token required"
 AUDITOR_GRANT_REQUIRED = "IR purpose key or ir role JWT required"
-TENANT_CLAIM = "https://panopticon.dev/tenant_id"
+TENANT_CLAIM = "https://spanopticon.dev/tenant_id"
 AUDITOR_JWT_PURPOSES = frozenset({"ir"})
 AUDITOR_JWT_ROLES = frozenset({"ir", "ir_export"})
 
@@ -111,7 +111,7 @@ def verify_jwt_locally(
 ) -> dict[str, Any] | None:
     """Honor a portal or API-key-exchange JWT without an OIDC dance.
 
-    Does not call the Keycloak token endpoint. Does not call Panopticon.
+    Does not call the Keycloak token endpoint. Does not call (s)panopticon.
     JWKS (when used) is the cached local verify Keycloak already publishes.
     """
 

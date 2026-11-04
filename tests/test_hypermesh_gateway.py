@@ -758,7 +758,7 @@ async def test_session_metrics_never_include_prompt_body(
         ),
     )
     _mock_runtime(app)
-    prompt = "secret prompt must never reach panopticon"
+    prompt = "secret prompt must never reach spanopticon"
     chat = await http_client.post(
         "/v1/chat/completions",
         headers=_renter(tenant_headers),
@@ -1099,7 +1099,7 @@ class _AcceptJwt:
             raise ValueError("rejected")
         claims: dict[str, object] = {"sub": "portal-user", "azp": "controlplane-frontend"}
         if self.tenant_id is not None:
-            claims["https://panopticon.dev/tenant_id"] = str(self.tenant_id)
+            claims["https://spanopticon.dev/tenant_id"] = str(self.tenant_id)
         return claims
 
     async def validate(self, token: str) -> dict[str, object]:

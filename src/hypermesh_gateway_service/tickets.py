@@ -1,6 +1,6 @@
 """Cached signed lease tickets learned from hm_gw_ GET /gateway/tickets.
 
-Panopticon is the broker. After a ticket is issued, chat uses this cache
+(s)panopticon is the broker. After a ticket is issued, chat uses this cache
 and honor_ticket. Do not re-ask the control plane per completion.
 
 Fingerprints are indexed back to a tenant so a bearer key can find its
