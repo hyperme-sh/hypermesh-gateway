@@ -1,0 +1,20 @@
+name: Release admission
+on:
+  pull_request:
+  push:
+    tags: ['**']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Exact release version (for example 0.24.1)
+        required: true
+        type: string
+permissions:
+  contents: read
+jobs:
+  release-admission:
+    uses: hyperme-sh/spanopticon/.github/workflows/component-release.yml@0efc58408afb982e11207ae8a1fca5207225ce01
+    with:
+      release-line: '0.24'
+      baseline-ref: ${{ vars.SPANOPTICON_RELEASE_BASELINE_SHA }}
+      requested-version: ${{ github.ref_type == 'tag' && github.ref_name || inputs.version || '' }}
