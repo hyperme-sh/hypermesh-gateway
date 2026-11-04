@@ -13,15 +13,25 @@ concurrency:
   group: package-release-${{ github.event.workflow_run.head_sha || github.ref }}
   cancel-in-progress: false
 jobs:
+  release-admission:
+    if: github.event_name == 'push'
+    uses: hyperme-sh/spanopticon/.github/workflows/component-release.yml@0efc58408afb982e11207ae8a1fca5207225ce01
+    with:
+      release-line: '0.24'
+      baseline-ref: ${{ vars.SPANOPTICON_RELEASE_BASELINE_SHA }}
+      requested-version: ${{ github.ref_name }}
   publish:
+    needs: release-admission
     permissions:
       contents: write
       actions: read
     if: >-
-      github.event_name == 'push' ||
-      (github.event.workflow_run.conclusion == 'success' &&
-       github.event.workflow_run.event == 'push' &&
-       github.event.workflow_run.head_branch == 'main')
+      always() &&
+      ((github.event_name == 'push' && needs.release-admission.result == 'success') ||
+       (github.event_name == 'workflow_run' && needs.release-admission.result == 'skipped' &&
+        github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.event == 'push' &&
+        github.event.workflow_run.head_branch == 'main'))
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
