@@ -38,10 +38,10 @@ For isolated development keep `HYPERMESH_WG_APPLY=0` and
 requires explicitly configured gateway credentials, ticket signing trust,
 control-plane access and host networking. Never reuse test credentials.
 
-The main-only shared-runner workflow uses pinned actions, read-only contents and exact
-repository credential headers. Actions remains disabled pending scoped
-`DEPENDENCY_READ_TOKEN` access and shared-runner qualification. Standalone container and
-network integration need separate qualification before deployment.
+The main-only shared-runner workflow uses pinned actions, read-only contents and
+repository-scoped dependency credentials. Pull-request preparation uses verified
+artifacts without private Git credentials. Package and container checks remain
+separate from live WireGuard and caller acceptance before deployment.
 
 ## Release channels
 
@@ -108,3 +108,36 @@ publisher independently verifies a real immutable stable baseline and refuses
 qualification snapshots, even if a caller job reports success. Existing valid
 stable records are retained; no release, version change, deployment or human
 approval prerequisite is introduced by this correction.
+
+## Standalone runtime image
+
+Use the owner Dockerfile and the package-qualified wheel inputs. The runtime
+includes `iproute2` and `wireguard-tools`; its entrypoint refuses to start if
+`ip` or `wg` cannot be found. A Python-only gateway image cannot implement the
+allocated WireGuard peers and must not replace this runtime.
+
+    export RELEASE_ARTIFACT_DIR="$(mktemp -d)"
+    bash scripts/check-package.sh --fixtures
+    bash scripts/check-runtime-image.sh
+
+The image context contains the checked owner wheel, digest-verified existing
+private dependency artifacts matching the complete lock graph, hash-locked public
+runtime requirements and an input manifest. No Git/deployment credentials or
+source checkout enter the context. It installs wheels in a fresh container
+interpreter; it does not copy an editable checkout or host virtual environment.
+Source, wheel and rebuilt archive qualification still precede the container
+checks. The owner Python runtime and its pinned dependency graph are unchanged.
+
+CI runs both binaries' version commands, imports the installed gateway, and
+checks that hiding the required tools makes startup fail. These checks are
+networkless and have no NET_ADMIN or tun device; they never configure WireGuard
+or contact hosts/providers. Real peer application, handshake and overlay traffic
+remain post-deployment acceptance gates.
+
+Main CI retains its tested runtime archive, archive SHA256, local image reference
+and input manifest as Actions artifacts. It does not publish a registry image,
+create a tag/release or deploy anything. Any subsequent approved publication must
+load those exact retained bytes and verify the source label and archive checksum;
+it must not rebuild or overwrite an existing published candidate. Normal gateway
+deployment still supplies its existing NET_ADMIN, tun, credentials and port
+configuration; this Dockerfile grants no host capabilities or ports.

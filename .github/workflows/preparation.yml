@@ -6,7 +6,7 @@ permissions:
 jobs:
   package:
     runs-on: [self-hosted, linux, x64, debrunner]
-    timeout-minutes: 25
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -24,6 +24,12 @@ jobs:
           export PREPARATION_EVIDENCE_DIR="$output/evidence"
           echo "PREPARED_OUTPUT=$output" >> "$GITHUB_ENV"
           bash scripts/check-package.sh --fixtures
+      - name: Qualify credential-free installed runtime image
+        shell: bash
+        run: |
+          export RELEASE_ARTIFACT_DIR="$PREPARED_OUTPUT/dist"
+          export RUNTIME_IMAGE_OUTPUT_DIR="$PREPARED_OUTPUT/runtime"
+          bash scripts/check-runtime-image.sh
       - name: Retain tested preparation bytes
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
