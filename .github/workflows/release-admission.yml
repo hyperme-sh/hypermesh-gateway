@@ -1,17 +1,20 @@
-name: Development version validation
+name: Release admission
+# Development PRs use version-policy.yml and package tests, without release history.
 on:
-  pull_request:
   push:
-    branches: [main]
     tags: ['**']
   workflow_dispatch:
+    inputs:
+      version:
+        description: Exact release version (for example 0.24.1)
+        required: true
+        type: string
 permissions:
   contents: read
 jobs:
-  version-policy:
-    runs-on: ${{ github.event.repository.private && fromJSON('["self-hosted", "linux", "x64", "debrunner"]') || 'ubuntu-24.04' }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          persist-credentials: false
-      - run: python3 scripts/check-version-policy.py
+  release-admission:
+    uses: hyperme-sh/spanopticon/.github/workflows/component-release.yml@32c064be9fe47e230e0d48d353ada8b38a7c1644
+    with:
+      release-line: '0.1'
+      baseline-ref: ${{ vars.SPANOPTICON_RELEASE_BASELINE_SHA }}
+      requested-version: ${{ github.ref_type == 'tag' && github.ref_name || inputs.version || '' }}
