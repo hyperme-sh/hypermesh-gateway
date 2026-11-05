@@ -622,6 +622,42 @@ async def test_unwired_families_do_not_change_session(http_client, app, tenant_h
     )).json()["run"] == "running"
 
 
+@pytest.mark.asyncio
+async def test_exclude_host_stops_at_the_caller_cap(http_client, app, tenant_headers, tenant_id):
+    from hypermesh_gateway_service.verbs import MAX_EXCLUDE_HOSTS
+
+    lease = uuid.uuid4()
+    _plant(app, tenant_id, lease)
+    headers = _renter(tenant_headers)
+    for index in range(MAX_EXCLUDE_HOSTS):
+        response = await _verb(
+            http_client,
+            headers,
+            "exclude_host",
+            args={"device_id": str(uuid.UUID(int=index + 1))},
+        )
+        assert response.status_code == 200, response.text
+    overflow = await _verb(
+        http_client,
+        headers,
+        "exclude_host",
+        args={"device_id": str(uuid.uuid4())},
+    )
+    assert overflow.status_code == 400
+    assert overflow.json()["status"] == "invalid_args"
+    repeat = await _verb(
+        http_client,
+        headers,
+        "exclude_host",
+        args={"device_id": str(uuid.UUID(int=1))},
+    )
+    assert repeat.status_code == 200, repeat.text
+    session = await http_client.get(
+        "/v1/router/session", headers=headers, params={"lease_id": str(lease)}
+    )
+    assert len(session.json()["routing"]["exclude_hosts"]) == MAX_EXCLUDE_HOSTS
+
+
 def test_verb_posture_does_not_require_the_peer(tenant_id, monkeypatch):
     from hypermesh_gateway_service.tickets import TicketCache
 

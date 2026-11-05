@@ -71,8 +71,8 @@
   },
   "added_files": {
     "hypermesh_gateway_service/verbs.py": {
-      "sha256": "f7ffab7b1edbd608f49938150712c93e7c396fbadb0a9219dd9d989b4c9e632b",
-      "reason": "Process-local router prompt verbs. Unwired verbs return wired false and change nothing.",
+      "sha256": "44cbc184d70f84d05a82befe3901b3021bf7862a8c9d1e82244657f1ff1d48c0",
+      "reason": "Process-local router prompt verbs. Unwired verbs return wired false and change nothing. Each caller can exclude at most 32 hosts.",
       "regression_test": "tests/test_router_verbs.py"
     }
   }

@@ -62,6 +62,7 @@ MAX_THOUGHT_CHARS = 2_048
 MAX_FRAMES = 8
 MAX_COMPLETED = 16
 MAX_INJECTED_CHARS = 64 * 1024
+MAX_EXCLUDE_HOSTS = 32
 MAX_CACHE_ENTRIES = 64
 MAX_CACHE_CHARS = 32_768
 MAX_CACHE_TTL_S = 86_400
@@ -111,7 +112,7 @@ VERB_SPECS: tuple[VerbSpec, ...] = (
     VerbSpec("prefer_tier", "model_mix", False, "Not wired. Tickets have no tier. The router did not store a preference."),
     VerbSpec("route_hint", "routing", False, "Not wired. A free-form hint is not applied. The router did not store it or change lease choice."),
     VerbSpec("prefer_host", "routing", True, "Prefer one host device id when a completion omits lease_id. Falls through when that host cannot serve the requested model."),
-    VerbSpec("exclude_host", "routing", True, "Drop a host device id from lease choice. An explicit lease on that host is refused."),
+    VerbSpec("exclude_host", "routing", True, f"Drop a host device id from lease choice. An explicit lease on that host is refused. At most {MAX_EXCLUDE_HOSTS} devices."),
     VerbSpec("affinity", "routing", True, "Stick later completions that omit lease_id to one lease until that lease cannot serve the request."),
     VerbSpec("system_append", "prompt", True, "Append a system message on later completions for this caller."),
     VerbSpec("style", "prompt", True, "Add a Style system message on later completions for this caller."),
@@ -803,6 +804,12 @@ def _apply(
         if parsed.remove:
             session.exclude_hosts.discard(device_id)
             return _accepted("Removed that device from the exclude set.", device_id=device_id)
+        if device_id not in session.exclude_hosts and len(session.exclude_hosts) >= MAX_EXCLUDE_HOSTS:
+            raise VerbError(
+                400,
+                "invalid_args",
+                f"At most {MAX_EXCLUDE_HOSTS} excluded hosts.",
+            )
         session.exclude_hosts.add(device_id)
         return _accepted(
             "Later lease choice drops this device. An explicit lease on it is refused.",

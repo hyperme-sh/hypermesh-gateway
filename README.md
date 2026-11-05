@@ -45,7 +45,7 @@ Caller session (model pin, routing, prompt text, attachments, frames) is per ten
 | Model mix | `use_model` | yes | Pin a catalog id when a later completion omits `model`. An explicit `model` still wins. Unknown catalog is `404` `model_not_found` |
 | Model mix | `mix_models`, `prefer_tier` | no | No blend and no tier on the ticket |
 | Routing | `prefer_host` | yes | Prefer that device id when `lease_id` is omitted. Falls through if it cannot serve the model |
-| Routing | `exclude_host` | yes | Drop that device. An explicit lease on it is `409` `host_excluded` |
+| Routing | `exclude_host` | yes | Drop that device, at most 32. An explicit lease on it is `409` `host_excluded` |
 | Routing | `affinity` | yes | Stick an omitted `lease_id` to one lease while that lease can serve the request |
 | Routing | `route_hint` | no | Free-form hints are not applied |
 | Prompt | `system_append`, `style`, `temperature_hint` | yes | Prepend system text, or set `temperature` only when the completion omits it. Screened with the outgoing request |
@@ -56,7 +56,7 @@ Caller session (model pin, routing, prompt text, attachments, frames) is per ten
 | Stack frames | `frame_push`, `frame_next`, `frame_pop`, `think` | yes | Router preamble on later completions. Pop keeps the result and drops that frame from the preamble. `think` survives pop. The caller's own messages are not deleted |
 | Skills | `skill_load`, `skill_unload`, `skill_list` | no | No skill catalog. `skill_list` returns `skills: []` and `wired: false` |
 
-`args` for the wired verbs: `use_model` `{model}` or `{clear: true}`; `prefer_host` `{device_id}` or `{clear: true}`; `exclude_host` `{device_id}`, `{device_id, remove: true}`, or `{clear: true}`; `affinity` `{lease_id}` or `{clear: true}`; `system_append` `{text}` or `{clear: true}`; `style` `{text}` or `{clear: true}`; `temperature_hint` `{temperature}` (0 through 2) or `{clear: true}`; `audit_override_request` `{reason}`; `attach` `{name, text, media_type?}`; `detach` `{attachment_id}`; `cache_put` `{key, text, ttl_s?}`; `cache_get` / `share` / `unshare` `{key}`; `frame_push` `{name, goal?}`; `frame_next` `{result, name, goal?}`; `frame_pop` `{result?}`; `think` `{name, text}` or `{name, clear: true}`. `device_id` is the leased host's device id, not an IP.
+`args` for the wired verbs: `use_model` `{model}` or `{clear: true}`; `prefer_host` `{device_id}` or `{clear: true}`; `exclude_host` `{device_id}` (at most 32), `{device_id, remove: true}`, or `{clear: true}`; `affinity` `{lease_id}` or `{clear: true}`; `system_append` `{text}` or `{clear: true}`; `style` `{text}` or `{clear: true}`; `temperature_hint` `{temperature}` (0 through 2) or `{clear: true}`; `audit_override_request` `{reason}`; `attach` `{name, text, media_type?}`; `detach` `{attachment_id}`; `cache_put` `{key, text, ttl_s?}`; `cache_get` / `share` / `unshare` `{key}`; `frame_push` `{name, goal?}`; `frame_next` `{result, name, goal?}`; `frame_pop` `{result?}`; `think` `{name, text}` or `{name, clear: true}`. `device_id` is the leased host's device id, not an IP.
 
 ## Development
 
