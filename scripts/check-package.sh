@@ -71,8 +71,8 @@ python3 scripts/export_release_contract.py "$scratch"/dist/*.whl --output "$scra
 python3 scripts/verify_release_candidate.py releases/prepared/release.json "$scratch/contract/contract.json" "$scratch/contract/evidence.json" hypermesh-gateway
 python3 scripts/export_release_contract.py "$scratch"/rebuilt/*.whl --output "$scratch/rebuilt-contract"
 cmp "$scratch/contract/contract.json" "$scratch/rebuilt-contract/contract.json"
-# Fail conservatively on runtime or installer changes from the qualified snapshot.
-cmp releases/qualification/contract.json "$scratch/contract/contract.json"
+# Only the recorded 0.24 private-pin transition is qualified here.
+.venv/bin/python scripts/verify_dependency_transition.py releases/qualification/contract.json "$scratch/contract/contract.json" releases/prepared/dependency-transition.json tests_artifacts/dependencies/manifest.json
 
 # Retain the exact validated bytes for the release channel; never rebuild them.
 if [[ -n "${RELEASE_ARTIFACT_DIR:-}" ]]; then

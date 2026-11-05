@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "release_line": "0.24",
+  "qualification_only": true,
+  "previous_contract_sha256": "b1db0da234141091bb55714c6a7dd74d01de2d07639392ea4e9cd90b31314a01",
+  "requirements": [
+    {
+      "before": "controlplane-api @ git+https://github.com/hyperme-sh/controlplane-api.git@edac59b2cc55923c983a11a451c4bed9ce53edef",
+      "after": "controlplane-api @ git+https://github.com/hyperme-sh/controlplane-api.git@c2122d98795452f54d56808d1d94f8b9dffb476f"
+    },
+    {
+      "before": "controlplane-core @ git+https://github.com/hyperme-sh/controlplane-core.git@8f66f5681b28e60a619344779252a5a048d39486",
+      "after": "controlplane-core @ git+https://github.com/hyperme-sh/controlplane-core.git@f75718584de811a1ef9fcc9226a67f073577b464"
+    },
+    {
+      "before": "controlplane-db @ git+https://github.com/hyperme-sh/controlplane-db.git@9cfad090c48e28bc33d1a96369e7e856c203a2bf",
+      "after": "controlplane-db @ git+https://github.com/hyperme-sh/controlplane-db.git@6ee52fe3e775548956cada649715fdde80f6cd1d"
+    },
+    {
+      "before": "controlplane-events @ git+https://github.com/hyperme-sh/controlplane-events.git@d8bc887460c08f30c6a1dcb951bac042bad326a7",
+      "after": "controlplane-events @ git+https://github.com/hyperme-sh/controlplane-events.git@ae5aa86dc53b1a9e25ae4527fefeea6da6fb66ea"
+    },
+    {
+      "before": "controlplane-identity @ git+https://github.com/hyperme-sh/controlplane-identity.git@5675e7b617db705a7b0caf25f2d65d8a492f32b1",
+      "after": "controlplane-identity @ git+https://github.com/hyperme-sh/controlplane-identity.git@94717d746f9d321dde1a44019c10e31acaee3204"
+    },
+    {
+      "before": "controlplane-tenancy @ git+https://github.com/hyperme-sh/controlplane-tenancy.git@09f26d3fa677b6cd8e43be3424b8e2fa793c6ba1",
+      "after": "controlplane-tenancy @ git+https://github.com/hyperme-sh/controlplane-tenancy.git@c8f01df2b475d92a41977161f8a72e095765481e"
+    },
+    {
+      "before": "hypermesh-ticket @ git+https://github.com/hyperme-sh/hypermesh-ticket.git@b62224be15665abb864d0dfd660fc558fb78b23f",
+      "after": "hypermesh-ticket @ git+https://github.com/hyperme-sh/hypermesh-ticket.git@f42e6a9fa1b0936a56b38775de2682dfd090ec01"
+    }
+  ]
+}
