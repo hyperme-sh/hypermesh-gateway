@@ -11,7 +11,7 @@ concurrency:
 jobs:
   release-admission:
     if: github.event_name == 'push'
-    uses: hyperme-sh/spanopticon/.github/workflows/component-release.yml@60e605ff39923c61bccc6c732181f82e557be35a
+    uses: hyperme-sh/spanopticon/.github/workflows/component-release.yml@32c064be9fe47e230e0d48d353ada8b38a7c1644
     with:
       release-line: '0.24'
       baseline-ref: ${{ vars.SPANOPTICON_RELEASE_BASELINE_SHA }}
@@ -22,7 +22,7 @@ jobs:
       contents: write
       actions: read
     if: github.event_name == 'push' && needs.release-admission.result == 'success'
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, linux, x64, debrunner]
     timeout-minutes: 15
     steps:
       - name: Publish exact tested stable artifacts
