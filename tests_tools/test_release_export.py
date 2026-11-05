@@ -19,7 +19,7 @@ def wheel(tmp_path, version='0.2.0', change=None):
     return path
 
 
-def test_metadata_change_preserves_complete_runtime_contract(tmp_path):
+def test_version_only_change_preserves_contract(tmp_path):
     a,_ = exporter.snapshot(wheel(tmp_path));b,e = exporter.snapshot(wheel(tmp_path,'0.24.0'))
     assert a == b
     assert e['version'] == '0.24.0'
@@ -41,3 +41,37 @@ def test_runtime_change_is_detected_without_execution(tmp_path):
 ])
 def test_invalid_inventory_or_identity_rejected(tmp_path,change):
     with pytest.raises(ValueError):exporter.snapshot(wheel(tmp_path,change=change))
+
+
+@pytest.mark.parametrize('field,value', [
+    ('Requires-Python', '>=3.14'),
+    ('Requires-Dist', 'example>=2'),
+    ('Provides-Extra', 'grpc'),
+])
+def test_installer_metadata_changes_are_detected(tmp_path, field, value):
+    before, _ = exporter.snapshot(wheel(tmp_path))
+    def change(files):
+        metadata = next(n for n in files if n.endswith('/METADATA'))
+        files[metadata] += f'{field}: {value}\n'.encode()
+    after, _ = exporter.snapshot(wheel(tmp_path, change=change))
+    assert before != after
+
+
+def test_entry_point_changes_are_detected_without_execution(tmp_path):
+    before, _ = exporter.snapshot(wheel(tmp_path))
+    def change(files):
+        prefix = next(n for n in files if n.endswith('/METADATA')).removesuffix('METADATA')
+        files[prefix + 'entry_points.txt'] = b'[console_scripts]\nexample = missing.module:main\n'
+    after, _ = exporter.snapshot(wheel(tmp_path, change=change))
+    assert before != after
+
+
+def test_dependency_header_order_does_not_change_contract(tmp_path):
+    def change(order):
+        def apply(files):
+            metadata = next(n for n in files if n.endswith('/METADATA'))
+            files[metadata] += ''.join(f'Requires-Dist: {name}>=1\n' for name in order).encode()
+        return apply
+    before, _ = exporter.snapshot(wheel(tmp_path, change=change(['alpha', 'beta'])))
+    after, _ = exporter.snapshot(wheel(tmp_path, change=change(['beta', 'alpha'])))
+    assert before == after

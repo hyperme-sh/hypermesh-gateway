@@ -30,11 +30,16 @@ def snapshot(wheel):
         if not re.fullmatch(r'(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)', ver) or prefix != f'hypermesh_gateway_service-{ver}.dist-info/':
             raise ValueError('Invalid package version')
         contents = {n: archive.read(n) for n in sorted(runtime)}
+        entry_points = archive.read(prefix + 'entry_points.txt').decode('utf-8') if prefix + 'entry_points.txt' in names else None
     root = contents.get('hypermesh_gateway_service/__init__.py')
     if root is None:
         raise ValueError('Missing hypermesh-gateway-service package exports')
     contract = {'schema_version': 1,
-                'coverage': 'conservative complete packaged hypermesh-gateway-service runtime and resources',
+                'coverage': 'conservative complete packaged hypermesh-gateway-service runtime, resources and installer metadata',
+                'requires_python': metadata.get_all('Requires-Python', []),
+                'requires_dist': sorted(metadata.get_all('Requires-Dist', [])),
+                'provides_extra': sorted(metadata.get_all('Provides-Extra', [])),
+                'entry_points': entry_points,
                 'packaged_file_sha256': {n: hashlib.sha256(b).hexdigest() for n, b in contents.items()}}
     encoded = (json.dumps(contract, sort_keys=True, indent=2)+'\n').encode()
     evidence = {'schema_version': 1, 'distribution': 'hypermesh-gateway-service', 'version': ver,
