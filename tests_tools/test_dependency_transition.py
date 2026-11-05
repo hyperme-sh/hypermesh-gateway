@@ -52,6 +52,20 @@ def test_unauthorized_line_cannot_be_declared_as_a_transition(bundle):
         run()
 
 
+def test_recorded_package_addition_is_bound_to_its_digest(bundle):
+    data, run = bundle
+    data[1]['packaged_file_sha256']['new_mod.py'] = 'a' * 64
+    data[2]['added_files'] = {'new_mod.py': {
+        'sha256': 'a' * 64,
+        'reason': 'Router verb module',
+        'regression_test': 'tests/test_router_verbs.py',
+    }}
+    run()
+    data[2]['added_files']['new_mod.py'].pop('reason')
+    with pytest.raises(ValueError):
+        run()
+
+
 def test_explicit_consumer_adaptation_is_bound_to_both_file_digests(bundle):
     data, run = bundle
     data[1]['packaged_file_sha256']['dep.py'] = 'd' * 64

@@ -18,6 +18,7 @@ from __future__ import annotations
 import asyncio
 
 import hmac
+import json
 import logging
 import os
 import uuid
@@ -52,6 +53,17 @@ class RenterGrant:
     kind: Literal["jwt", "api_key"]
     subject: str
     claims: dict[str, Any] | None = None
+
+    @property
+    def router_subject(self) -> str:
+        """Stable, credential-kind-scoped owner for private router state."""
+        if self.kind == "api_key":
+            return "api_key:" + self.subject
+        claims = self.claims or {}
+        sub = claims.get("sub")
+        if not isinstance(sub, str) or not sub.strip():
+            raise RenterUnauthorized()
+        return "jwt:" + json.dumps([claims.get("iss", ""), sub], separators=(",", ":"))
 
 
 class JwtValidator(Protocol):

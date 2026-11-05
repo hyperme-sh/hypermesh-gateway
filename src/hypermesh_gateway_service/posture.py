@@ -27,11 +27,15 @@ def require_chat_posture(
     lease_id: uuid.UUID,
     *,
     peer_up: bool,
+    require_peer: bool = True,
 ) -> TicketClaims:
     """Honor a cached ticket only when compact-cert is green and the peer is up.
 
     Upload-origin catalog rows without an allowed admission fail closed.
     Seed / lab rows keep the existing certified pack-v1 path.
+    ``require_peer`` false keeps the cert and honor checks and skips the
+    WireGuard peer. Router verbs use that: they change this process's
+    policy and do not need the host to be up.
     """
 
     ticket = cache.get(tenant_id, lease_id)
@@ -39,6 +43,6 @@ def require_chat_posture(
         raise TicketNotReady()
     if ticket is not None and ticket.catalog_origin == "upload" and not ticket.catalog_admitted:
         raise TicketNotReady()
-    if not peer_up:
+    if require_peer and not peer_up:
         raise TicketNotReady()
     return cache.honor(tenant_id, lease_id)
