@@ -66,3 +66,19 @@ receipt and safety subject. The equivalent runtime guard was already present
 in the standalone import; these tests qualify that behavior without replacing it.
 The source's retirement-aware bootstrap verifier is not yet adopted and remains
 part of issue #18's separate closure work.
+
+## Test qualification and stable acceptance
+
+GitHub `test-<commit>` prereleases are development snapshots. Their embedded
+package version does not reserve a stable version. Artifact and consumer evidence
+belongs under `releases/qualification`. Owning-package and artifact validation
+remain separate from stable release admission. Future test receipts must carry
+an explicit non-stable classification.
+
+`releases/accepted` and `SPANOPTICON_RELEASE_BASELINE_SHA` are reserved for an
+actual immutable stable GitHub release. The pinned shared guard verifies the live
+release channel, stable tag source and asset digests; a test snapshot cannot
+become accepted through a provenance label. No stable baseline is recorded until
+that release exists. Stable publication remains closed without a valid baseline;
+first stable bootstrap and coordinated release qualification remain separate.
+No stable version, approval prerequisite or deployment is introduced here.
