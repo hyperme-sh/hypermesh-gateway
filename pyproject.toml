@@ -32,7 +32,7 @@ dev = [
 packages = ["src/hypermesh_gateway_service"]
 
 [tool.hatch.build.targets.sdist]
-include = ["/releases/prepared", "/releases/qualification", "/tests_artifacts", "/tests_tools", "/src", "/tests", "/scripts", "/edge-routes.json", "/pyproject.toml", "/uv.lock", "/README.md"]
+include = ["/Dockerfile", "/docker-entrypoint.sh", "/releases/prepared", "/releases/qualification", "/tests_artifacts", "/tests_tools", "/src", "/tests", "/scripts", "/edge-routes.json", "/pyproject.toml", "/uv.lock", "/README.md"]
 
 [tool.hatch.metadata]
 allow-direct-references = true

@@ -11,7 +11,7 @@ jobs:
     runs-on:
       group: shared-local
       labels: [self-hosted, linux, x64, debrunner]
-    timeout-minutes: 15
+    timeout-minutes: 30
     environment: controlplane-libs-read
     steps:
       - name: Mint repository-scoped dependency token
@@ -68,6 +68,21 @@ jobs:
           export GIT_CONFIG_VALUE_7="AUTHORIZATION: basic $header"
           unset DEPENDENCY_READ_TOKEN
           bash scripts/check-package.sh
+      - name: Qualify installed runtime image without deployment credentials
+        shell: bash
+        run: |
+          output=$(mktemp -d "$RUNNER_TEMP/gateway-runtime.XXXXXX")
+          echo "RUNTIME_IMAGE_OUTPUT_DIR=$output" >> "$GITHUB_ENV"
+          export RUNTIME_IMAGE_OUTPUT_DIR="$output"
+          bash scripts/check-runtime-image.sh
+      - name: Retain the exact tested runtime image
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: tested-runtime-image
+          path: ${{ env.RUNTIME_IMAGE_OUTPUT_DIR }}/*
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
       - name: Retain validated package bytes
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
