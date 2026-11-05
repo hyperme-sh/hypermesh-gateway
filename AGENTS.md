@@ -1,22 +1,25 @@
-## Version and publication authority
+## Version, tag and release authority
 
-The owner has not authorized the 0.24.0 release. Preserve the recorded
-pre-0.24.0 package versions in `.github/version-policy.json`. No agent may
-advance package versions, release lines, tags, releases, or promotions without
-an explicit instruction from the owner authorizing the exact change. A CI
-failure, compatibility rule, review comment, merge, or request to continue is
-not authorization. Never bump versions merely to make a check pass.
+The owner has not authorized the services' 0.24.0 release. Service packages
+retain their recorded pre-0.24.0 versions. Host and visor have a separate release
+cycle. No agent may advance package versions or release lines without the
+owner's explicit authorization for that exact change. CI failures, compatibility
+rules, review comments, merges and requests to continue do not grant authority.
 
-Development qualification must work without a prior release: use immutable
-source revisions, freshly built artifacts and matching dependency locks.
-Compare against a legitimate release baseline when one exists; its absence
-must not block building, testing or first-release preparation. Qualification
-never grants publication authority. Preserve historical tags and evidence.
+Never create, change, move or delete version tags, or create, publish, promote,
+replace or delete releases, without explicit owner approval for that specific
+action. Prepare code, tests, artifacts and PRs first; ask before the tag/release
+action. Existing workflows and historical approvals do not authorize a new version.
 
-Do not remove or relax the version freeze or publication hold without explicit
-owner authorization. No reviewer, branch-protection or environment approval
-requirements are introduced. Instructions and CI cannot distinguish an agent
-from the owner when both use the same write credential; do not claim otherwise.
+Development qualification must work without a prior release. Use immutable
+source revisions, fresh artifacts and consistent locks. Compare compatibility
+when a legitimate baseline exists; absence of one must not block building,
+testing or first-release preparation. Preserve historical tags and evidence.
+
+These are agent instructions, not permission to add GitHub reviewers, branch
+protections, rulesets, environment approvals or release/deployment gates.
+Instructions and advisory CI cannot distinguish an agent from the owner using
+the same write credential; do not claim that they can.
 
 # Hypermesh gateway development
 

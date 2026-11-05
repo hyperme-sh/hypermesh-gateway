@@ -1,12 +1,32 @@
-name: Publication held by owner
+name: Package release channels
 on:
-  workflow_dispatch:
+  push:
+    tags: ['v*']
 permissions:
   contents: read
+  actions: read
+concurrency:
+  group: package-release-stable-package-release
+  cancel-in-progress: false
 jobs:
-  publication-not-authorized:
+  release-admission:
+    if: github.event_name == 'push'
+    uses: hyperme-sh/spanopticon/.github/workflows/component-release.yml@32c064be9fe47e230e0d48d353ada8b38a7c1644
+    with:
+      release-line: '0.1'
+      baseline-ref: ${{ vars.SPANOPTICON_RELEASE_BASELINE_SHA }}
+      requested-version: ${{ github.ref_name }}
+  publish:
+    needs: release-admission
+    permissions:
+      contents: write
+      actions: read
+    if: github.event_name == 'push' && needs.release-admission.result == 'success'
     runs-on: [self-hosted, linux, x64, debrunner]
+    timeout-minutes: 15
     steps:
-      - run: |
-          echo 'The owner has not authorized tagging or publication.' >&2
-          exit 1
+      - name: Publish exact tested stable artifacts
+        uses: hyperme-sh/.github/actions/release-channel@c16044a6d987d7d912d70bcd09ea731ab2b91b9e
+        with:
+          workflow: .github/workflows/package.yml
+          token: ${{ github.token }}
