@@ -22,7 +22,7 @@ jobs:
       contents: write
       actions: read
     if: github.event_name == 'push' && needs.release-admission.result == 'success'
-    runs-on: [self-hosted, linux, x64, debrunner]
+    runs-on: ${{ github.event.repository.private && fromJSON('["self-hosted", "linux", "x64", "debrunner"]') || 'ubuntu-24.04' }}
     timeout-minutes: 15
     steps:
       - name: Publish exact tested stable artifacts
