@@ -72,7 +72,7 @@ python3 scripts/verify_release_candidate.py releases/prepared/release.json "$scr
 python3 scripts/export_release_contract.py "$scratch"/rebuilt/*.whl --output "$scratch/rebuilt-contract"
 cmp "$scratch/contract/contract.json" "$scratch/rebuilt-contract/contract.json"
 # Fail conservatively on runtime or installer changes from the qualified snapshot.
-cmp releases/qualified/contract.json "$scratch/contract/contract.json"
+cmp releases/qualification/contract.json "$scratch/contract/contract.json"
 
 # Retain the exact validated bytes for the release channel; never rebuild them.
 if [[ -n "${RELEASE_ARTIFACT_DIR:-}" ]]; then

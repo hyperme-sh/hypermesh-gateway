@@ -81,7 +81,7 @@ artifact-derived runtime and installer contracts as Actions artifacts. It does
 not publish releases. Owner and private dependency versions remain unchanged;
 0.24 dependency alignment and stable release acceptance are unfinished.
 
-`releases/qualified` records a verified prior immutable test snapshot and its
+`releases/qualification` records a verified prior immutable test snapshot and its
 original Actions provenance. It is qualification evidence, not an accepted stable
 release, and must not configure the stable release baseline variable.
 `releases/prepared` identifies the exact prepared wheel by digest. Package tests

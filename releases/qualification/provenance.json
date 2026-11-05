@@ -17,5 +17,7 @@
     "release bytes equal tested bytes",
     "immutable release and tag revision",
     "asset digests equal manifest"
-  ]
+  ],
+  "classification": "development_snapshot",
+  "stable_acceptance": false
 }
