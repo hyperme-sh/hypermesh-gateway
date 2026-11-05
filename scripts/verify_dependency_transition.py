@@ -1,4 +1,4 @@
-"""Qualify an explicit private-pin transition, never grant stable admission."""
+"""Qualify an explicit dependency and consumer adaptation, never grant stable admission."""
 import hashlib
 import json
 from pathlib import Path
@@ -41,6 +41,17 @@ def verify(before_path, after_path, transition_path, fixture_path):
         require(requirements.count(change['before']) == 1, 'Transition source missing or ambiguous')
         requirements[requirements.index(change['before'])] = change['after']
     expected['requires_dist'] = sorted(requirements)
+    # Consumer adaptations are explicit, byte-bound preparation evidence. They
+    # neither grant stable compatibility nor allow unrecorded runtime changes.
+    runtime = dict(before['packaged_file_sha256'])
+    for path, change in transition.get('consumer_adaptations', {}).items():
+        require(path in runtime, 'Consumer adaptation must name an existing file')
+        require(change.get('reason') and change.get('regression_test'), 'Consumer adaptation requires rationale and regression evidence')
+        require(runtime[path] == change['before_sha256'], 'Wrong consumer adaptation source')
+        digest = change['after_sha256']
+        require(len(digest) == 64 and all(c in '0123456789abcdef' for c in digest), 'Invalid consumer adaptation digest')
+        runtime[path] = digest
+    expected['packaged_file_sha256'] = runtime
     require(expected == after, 'Unexpected runtime or installer contract change')
 
 

@@ -42,5 +42,19 @@
     "operator-ban-store": "0.1.0",
     "controlplane-core": "0.1.0",
     "hypermesh-ticket": "0.1.0"
+  },
+  "consumer_adaptations": {
+    "hypermesh_gateway_service/renter_auth.py": {
+      "before_sha256": "085f612fa7169ab97e4dca8fb532c09f4de16a0517865bfa9dde2f1be09c07dc",
+      "after_sha256": "ba63ce37b8f1fab01959aebfbcb82ba5b68fac03880cc2b84239f3f6dbd148b2",
+      "reason": "Run synchronous identity validation in a worker thread from async handlers; retain fail-closed lifecycle checks.",
+      "regression_test": "tests/test_async_lifecycle.py"
+    },
+    "hypermesh_gateway_service/routes.py": {
+      "before_sha256": "0c74b3e5ecd3cefe31a6475cecddf43bdcf571f932879b9d0c8be7b294ef5c92",
+      "after_sha256": "fbe104a8bef57276266ea530559e4b8821b5a202c4944a7294364227ebde3fd9",
+      "reason": "Run synchronous identity validation in a worker thread from async handlers; retain fail-closed lifecycle checks.",
+      "regression_test": "tests/test_async_lifecycle.py"
+    }
   }
 }
