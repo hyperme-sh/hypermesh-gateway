@@ -21,8 +21,8 @@ when one header is empty or malformed.
 
 ## Development
 
-Use Python 3.13 and uv 0.11.26 with read access to the eight pinned private
-repositories named in `.github/workflows/package.yml`.
+Use Python 3.13 and uv 0.11.26. The pinned source dependencies are public;
+no private credentials are needed. The gateway is licensed under Apache-2.0.
 
     uv sync --frozen
     bash scripts/check-package.sh
@@ -38,8 +38,8 @@ For isolated development keep `HYPERMESH_WG_APPLY=0` and
 requires explicitly configured gateway credentials, ticket signing trust,
 control-plane access and host networking. Never reuse test credentials.
 
-The main-only shared-runner workflow uses pinned actions, read-only contents and
-repository-scoped dependency credentials. Pull-request preparation uses verified
+Private CI uses debrunners; public CI uses hosted Ubuntu. Main qualification uses
+pinned actions, read-only contents and public Git without ambient credentials. Pull-request preparation uses verified
 artifacts without private Git credentials. Package and container checks remain
 separate from live WireGuard and caller acceptance before deployment.
 

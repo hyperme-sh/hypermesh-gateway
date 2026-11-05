@@ -1,0 +1,7 @@
+{
+  "source_repository": "FyberLabs/panopticon",
+  "source_revision": "2cd00fd9a7ebb950999571a81be7cb0a24d9264e",
+  "source": "products/hypermesh-ticket/tests/test_installed_packages.py",
+  "destination": "tests/test_installed_package.py",
+  "adaptation": "Gateway case uses currently qualified isolated interpreter rather than monorepo uv workspace; assertions unchanged."
+}
