@@ -24,3 +24,11 @@ The preparation-only PR lane may run existing package consumers on disposable
 hosted Ubuntu using exact dependency-wheel fixtures and no private credentials.
 Keep its permissions read-only and retain Actions artifacts only. Do not tag,
 publish releases or merge preparation PRs as part of qualification.
+
+## Private CI runner policy
+
+Private repository jobs use `[self-hosted, linux, x64, debrunner]`, including
+preparation, package validation and release jobs. This supersedes earlier hosted
+runner exceptions in this file. Keep dedicated infrastructure-convergence and
+trusted payment-smoke jobs on their existing specialized selectors. Reusable
+workflows must route private callers to debrunners. Do not add approval gates.
