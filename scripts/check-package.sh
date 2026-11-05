@@ -34,8 +34,9 @@ esac
 if (( $# > 1 )); then echo 'Unexpected arguments' >&2; exit 2; fi
 uv sync --frozen --python 3.13 "${sync_options[@]}"
 if (( ${#fixture_wheels[@]} )); then
-  uv pip install --python .venv/bin/python --no-deps --reinstall "${fixture_wheels[@]}"
+  uv pip install --no-config --python .venv/bin/python --no-deps --reinstall "${fixture_wheels[@]}"
 fi
+.venv/bin/python scripts/verify_preparation_environment.py "$PWD"
 uv run --frozen "${run_options[@]}" pytest
 uv run --frozen "${run_options[@]}" pytest -q tests_tools
 scratch=$(mktemp -d)
@@ -46,7 +47,7 @@ uv export --frozen "${export_options[@]}" --no-emit-project --format requirement
 uv venv --python 3.13 "$scratch/venv"
 uv pip sync --python "$scratch/venv/bin/python" "$scratch/requirements.txt"
 if (( ${#fixture_wheels[@]} )); then
-  uv pip install --python "$scratch/venv/bin/python" --no-deps "${fixture_wheels[@]}" "$scratch"/dist/*.whl
+  uv pip install --no-config --python "$scratch/venv/bin/python" --no-deps "${fixture_wheels[@]}" "$scratch"/dist/*.whl
 else
 uv pip uninstall --python "$scratch/venv/bin/python" controlplane-core controlplane-api controlplane-tenancy controlplane-identity controlplane-db controlplane-events operator-ban-store hypermesh-ticket
 uv pip install --python "$scratch/venv/bin/python" --constraint "$scratch/requirements.txt" "$scratch"/dist/*.whl
@@ -62,7 +63,7 @@ with tarfile.open(next((root / 'dist').glob('*.tar.gz'))) as archive:
 PY
 uv build --wheel "$scratch"/sdist/* --out-dir "$scratch/rebuilt"
 uv run --frozen "${run_options[@]}" python scripts/verify_wheel.py "$scratch/rebuilt"
-uv pip install --python "$scratch/venv/bin/python" --no-deps --reinstall "$scratch"/rebuilt/*.whl
+uv pip install --no-config --python "$scratch/venv/bin/python" --no-deps --reinstall "$scratch"/rebuilt/*.whl
 (cd "$scratch" && "$scratch/venv/bin/python" -I -m pytest -c /dev/null -o asyncio_mode=auto -o asyncio_default_fixture_loop_scope=function tests)
 
 # Retain the exact validated bytes for the release channel; never rebuild them.
