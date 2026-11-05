@@ -66,6 +66,14 @@ uv run --frozen "${run_options[@]}" python scripts/verify_wheel.py "$scratch/reb
 uv pip install --no-config --python "$scratch/venv/bin/python" --no-deps --reinstall "$scratch"/rebuilt/*.whl
 (cd "$scratch" && "$scratch/venv/bin/python" -I -m pytest -c /dev/null -o asyncio_mode=auto -o asyncio_default_fixture_loop_scope=function tests)
 
+# Bind the declared candidate to the bytes exercised by every consumer.
+python3 scripts/export_release_contract.py "$scratch"/dist/*.whl --output "$scratch/contract"
+python3 scripts/verify_release_candidate.py releases/prepared/release.json "$scratch/contract/contract.json" "$scratch/contract/evidence.json" hypermesh-gateway
+python3 scripts/export_release_contract.py "$scratch"/rebuilt/*.whl --output "$scratch/rebuilt-contract"
+cmp "$scratch/contract/contract.json" "$scratch/rebuilt-contract/contract.json"
+# Fail conservatively on runtime or installer changes from the qualified snapshot.
+cmp releases/qualified/contract.json "$scratch/contract/contract.json"
+
 # Retain the exact validated bytes for the release channel; never rebuild them.
 if [[ -n "${RELEASE_ARTIFACT_DIR:-}" ]]; then
   mkdir -p "$RELEASE_ARTIFACT_DIR"

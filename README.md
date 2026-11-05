@@ -77,8 +77,15 @@ root metadata, the complete active lock graph and transitive wheel metadata.
 Explicit private extras and unrecognized conditional pins fail closed.
 
 The read-only pull-request workflow retains tested wheels, source archives and
-an artifact-derived runtime inventory as Actions artifacts. It does not publish
-releases. These are preparation evidence, not an accepted synchronized dependency
-baseline: package version alignment, dependency adoption and comparison against
-a qualified prior baseline remain separate work. Existing owner test boundaries
-and live/provider qualification requirements continue to apply.
+artifact-derived runtime and installer contracts as Actions artifacts. It does
+not publish releases. Owner and private dependency versions remain unchanged;
+0.24 dependency alignment and stable release acceptance are unfinished.
+
+`releases/qualified` records a verified prior immutable test snapshot and its
+original Actions provenance. It is qualification evidence, not an accepted stable
+release, and must not configure the stable release baseline variable.
+`releases/prepared` identifies the exact prepared wheel by digest. Package tests
+verify that binding and compare the rebuilt source archive's contract. Contracts
+include runtime resources, Python constraints, dependencies, extras and entry
+points. Dependency transitions require compatibility qualification before adoption.
+Existing owner test boundaries and live/provider qualification requirements apply.

@@ -9,13 +9,18 @@ from packaging.utils import canonicalize_name
 
 
 def public_requirements(requirements):
-    return {Requirement(r) for r in requirements if not Requirement(r).url}
+    parsed = [Requirement(r) for r in requirements]
+    if any(r.url and not r.url.startswith('git+') for r in parsed):
+        raise ValueError('Unsupported non-Git direct reference')
+    return {r for r in parsed if not r.url}
 
 
 def locked_public_requirements(records):
     result = []
     for r in records:
-        if 'git' in r or 'url' in r: continue
+        if 'url' in r:
+            raise ValueError('Unsupported non-Git direct reference in lock metadata')
+        if 'git' in r: continue
         value = r['name']
         if r.get('extras'): value += '[' + ','.join(r['extras']) + ']'
         value += r.get('specifier', '')
@@ -47,6 +52,8 @@ def verify_installed(requirements):
     while pending:
         requirement = pending.pop()
         if requirement.marker and not requirement.marker.evaluate({'extra': ''}): continue
+        if requirement.url and not requirement.url.startswith('git+'):
+            raise ValueError('Unsupported non-Git direct reference')
         package = distribution(requirement.name)
         if requirement.specifier and not requirement.specifier.contains(package.version, prereleases=True):
             raise ValueError(f'Installed {requirement.name} {package.version} does not satisfy {requirement.specifier}')

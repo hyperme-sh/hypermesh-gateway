@@ -34,3 +34,24 @@ def test_requested_extra_is_checked(monkeypatch):
     monkeypatch.setattr(check, 'distribution', packages.__getitem__)
     check.verify_installed(['owner'])
     with pytest.raises(ValueError, match='does not satisfy'): check.verify_installed(['owner[feature]'])
+
+
+@pytest.mark.parametrize('scope', ['runtime', 'dev'])
+def test_non_git_direct_reference_rejected(root, scope):
+    p = root/'pyproject.toml'
+    key = 'dependencies = [' if scope == 'runtime' else 'dev = ['
+    p.write_text(p.read_text().replace(key, key + '"pytest @ https://example.invalid/pytest-999.whl",', 1))
+    with pytest.raises(ValueError, match='non-Git direct reference'):
+        check.verify_lock_metadata(root)
+
+
+def test_locked_direct_reference_rejected():
+    with pytest.raises(ValueError, match='non-Git direct reference'):
+        check.locked_public_requirements([{'name': 'pytest', 'url': 'https://example.invalid/pytest.whl'}])
+
+
+def test_transitive_direct_reference_rejected(monkeypatch):
+    packages = {'owner': SimpleNamespace(version='1.0', requires=['child @ https://example.invalid/child.whl'])}
+    monkeypatch.setattr(check, 'distribution', packages.__getitem__)
+    with pytest.raises(ValueError, match='non-Git direct reference'):
+        check.verify_installed(['owner'])
