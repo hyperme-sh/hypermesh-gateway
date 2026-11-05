@@ -5,6 +5,7 @@ from pathlib import Path
 import sys
 from packaging.requirements import Requirement
 from packaging.utils import canonicalize_name
+from packaging.version import Version
 
 
 def verify(before_path, after_path, transition_path, fixture_path):
@@ -16,10 +17,11 @@ def verify(before_path, after_path, transition_path, fixture_path):
     def require(condition, message):
         if not condition:
             raise ValueError(message)
-    require(transition.get('schema_version') == 1 and transition.get('release_line') == '0.24', 'Invalid transition line/schema')
+    require(transition.get('schema_version') == 1 and transition.get('version_policy') == 'pre-0.24', 'Invalid transition line/schema')
     require(transition.get('qualification_only') is True, 'Transition must remain qualification only')
     require(transition['previous_contract_sha256'] == hashlib.sha256(before_raw).hexdigest(), 'Wrong previous contract')
-    require(all(d['version'].rsplit('.', 1)[0] == '0.24' for d in fixtures), 'Mixed fixture release lines')
+    require(transition.get('dependency_versions') == {d['distribution']: d['version'] for d in fixtures}, 'Fixture versions differ from the declared transition')
+    require(all(Version(d['version']) < Version('0.24.0') for d in fixtures), 'Fixture version is outside the authorized pre-0.24 policy')
     records = {d['distribution']: d for d in fixtures}
     require(len(records) == len(fixtures), 'Duplicate fixture distribution')
     changes = transition['requirements']
