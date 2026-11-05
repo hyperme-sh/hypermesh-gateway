@@ -27,9 +27,16 @@ def main():
     actual = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=root, text=True).strip()
     if actual != args.source_sha:
         parser.error('Selected commit differs from the checkout')
-    subprocess.run(['git', 'diff', '--exit-code', 'HEAD', '--', 'src', 'pyproject.toml',
-                    'uv.lock', 'Dockerfile', 'docker-entrypoint.sh', 'scripts'],
+    subprocess.run(['git', 'ls-files', '--error-unmatch', 'Dockerfile',
+                    'docker-entrypoint.sh', 'scripts/prepare-runtime-context.py',
+                    'pyproject.toml', 'uv.lock', 'tests_artifacts/dependencies/manifest.json'],
                    cwd=root, check=True, stdout=subprocess.DEVNULL)
+    changed = subprocess.check_output(
+        ['git', 'status', '--porcelain', '--untracked-files=all', '--', 'src',
+         'pyproject.toml', 'uv.lock', 'Dockerfile', 'docker-entrypoint.sh',
+         'scripts', 'tests_artifacts'], cwd=root, text=True)
+    if changed:
+        raise SystemExit('Runtime inputs include changes outside the selected source commit')
     dependencies = verify(root)
     wheel, = args.artifacts.glob('*.whl')
     subprocess.run(['python3', str(root/'scripts/verify_wheel.py'), str(args.artifacts)], check=True)
