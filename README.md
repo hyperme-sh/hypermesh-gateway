@@ -57,3 +57,12 @@ organization policy may shorten it). Expired evidence fails closed: validate a
 new main revision. The publisher verifies the run, source, workflow and artifact
 digest independently of release metadata. Repository immutable releases must be
 enabled. See the [shared release contract](https://github.com/hyperme-sh/.github/blob/7749591fccd30d46ba9b0adabe82114001c9d0de/actions/release-channel/README.md).
+
+The credential-attribution regressions adopted from Panopticon #702 exercise
+both renter and IR chat paths, including edge-prefixed aliases. Dual-header
+requests must stop before key validation, approval lookup, receipt creation,
+safety attribution or host calls. A single valid IR key must own the approval,
+receipt and safety subject. The equivalent runtime guard was already present
+in the standalone import; these tests qualify that behavior without replacing it.
+The source's retirement-aware bootstrap verifier is not yet adopted and remains
+part of issue #18's separate closure work.
