@@ -1,143 +1,199 @@
 # Hypermesh gateway
 
-Ticket-authorized renter chat and WireGuard gateway. Package
-`hypermesh-gateway-service` 0.1.0; factory
-`hypermesh_gateway_service.app.create_app`; entry point
-`python -m hypermesh_gateway_service.main`.
+`hypermesh-gateway-service` 0.1.0 is the Hypermesh data-plane gateway. It caches signed lease tickets from the control plane, keeps a WireGuard peer to each assigned host, and proxies renter chat to the host that ticket names. The Python package entry point is `python -m hypermesh_gateway_service.main`. The application factory is `hypermesh_gateway_service.app.create_app`.
 
-The control plane assigns gateway/host peers and signed lease tickets. This
-service caches and validates tickets, applies configured peer updates and proxies
-authorized chat requests to the assigned host. Ticket contracts come from the
-separate `hypermesh-ticket` package; no control-plane service internals are copied.
-The bundled IR taxonomy JSON is included in both distributions.
+## Why
 
-Health is `/api/v1/health/`; version is `/version`; OpenAPI is `/openapi.json`.
-`edge-routes.json` describes the routing contract. Authentication, tenant binding,
-lease purpose, ticket expiry/revocation and host admission checks remain required.
-Safety screening and request-body limits apply before forwarding.
-Supply exactly one credential header: `Authorization` or `X-Api-Key`. Requests
-containing both are rejected before authorization or approval lookup, including
-when one header is empty or malformed.
+A renter’s chat has to reach one leased host, and only that host, for as long as the lease is valid. The control plane decides the assignment and signs the lease ticket. This process is the hop that enforces the ticket and carries the traffic: it checks tenant, purpose, expiry, revocation, and host certification locally, then forwards the completion across a standing WireGuard tunnel. Putting that check on the gateway keeps lease authorization on the path that actually talks to the host.
 
-## Development
+## How it works
 
-Use Python 3.13 and uv 0.11.26. The pinned source dependencies are public;
-no private credentials are needed. The gateway is licensed under Apache-2.0.
+The control plane assigns a gateway and a host, signs a lease ticket, and records the WireGuard tunnel. Ticket verification comes from the separate [`hypermesh-ticket`](https://github.com/hyperme-sh/hypermesh-ticket) package (the exact revision is pinned in `pyproject.toml`). This repository does not vendor control-plane service code.
 
-    uv sync --frozen
-    bash scripts/check-package.sh
+On a timer the gateway pulls tickets and tunnels for each watched tenant, caches them, and applies one WireGuard peer per host on interface `wg-hm`. A completion request then:
 
-Checks run source tests, a normally installed wheel outside the checkout, and a
-rebuilt source distribution. Wheel runtime and bundled resource bytes must match
-source. Tests use fake control planes, mocked HTTP hosts and mocked command
-execution; they do not qualify real WireGuard, host enrollment, upstream model
-serving, deployment or consumer cutover.
+1. Accepts either a portal access token or a renter API key.
+2. Binds that credential to a tenant and selects a lease.
+3. Honors the cached ticket (signature, purpose, expiry, revocation, tenant, host certification, and a live peer handshake).
+4. Applies the body limit, per-lease rate limit, and safety screen.
+5. Streams the OpenAI-shaped request to the host at `http://<overlay-ip>:8080/v1/chat/completions` and streams the host response back.
 
-For isolated development keep `HYPERMESH_WG_APPLY=0` and
-`HYPERMESH_ASSIGNMENT_REFRESH_S=0`; inject a fake control plane. Real operation
-requires explicitly configured gateway credentials, ticket signing trust,
-control-plane access and host networking. Never reuse test credentials.
+Usage counters are queued and posted back to the control plane. The bundled IR taxonomy pack (`src/hypermesh_gateway_service/packs/ir-taxonomy-v1.json`) ships in the wheel for the optional IR chat route.
 
-Private CI uses debrunners; public CI uses hosted Ubuntu. Main qualification uses
-pinned actions, read-only contents and public Git without ambient credentials. Pull-request preparation uses verified
-artifacts without private Git credentials. Package and container checks remain
-separate from live WireGuard and caller acceptance before deployment.
+This service is reached directly. `edge-routes.json` records that exposure.
 
-## Release channels
+### HTTP surface
 
-Main validation retains its exact qualified files in Actions artifacts. It does
-not create GitHub releases or tags. Historical `test-<commit>` prereleases remain
-qualification evidence and do not establish an accepted stable release.
+| Method | Path | Caller |
+| --- | --- | --- |
+| GET | `/api/v1/health/` | anyone |
+| GET | `/version` | anyone |
+| GET | `/openapi.json` | anyone |
+| GET | `/v1/models` | renter token or API key |
+| POST | `/v1/chat/completions` | renter token or API key |
+| POST | `/v1/ir/chat/completions` | IR key or IR-role token |
+| GET | `/v1/ir/receipts` | tenant-bound IR credential |
+| GET | `/api/v1/hypermesh-gateway/ready` | gateway service credential |
+| GET | `/api/v1/hypermesh-gateway/tunnels` | gateway service credential |
+| POST | `/api/v1/hypermesh-gateway/tunnels/apply` | gateway service credential |
+| POST | `/api/v1/hypermesh-gateway/metrics` | gateway service credential |
+| GET | `/api/v1/hypermesh-gateway/leases/{lease_id}/completions-signal` | gateway service credential |
 
-Stable publication requires an explicit `vMAJOR.MINOR.PATCH` tag, the exact
-successful main validation artifact, compatible declared contracts and an actual
-immutable stable baseline. The publisher independently verifies that evidence;
-successful caller jobs alone cannot establish acceptance. Missing evidence and
-first-stable bootstrap remain closed. Package qualification, coordinated consumer
-acceptance and runtime deployment remain separate.
+The same handlers are also mounted at `/api/v1/hypermesh-gateway/v1/models`, `/api/v1/hypermesh-gateway/v1/chat/completions`, `/api/v1/hypermesh-gateway/v1/ir/chat/completions`, and `/api/v1/hypermesh-gateway/v1/ir/receipts`.
 
-### Package preparation
+Send **one** credential header, `Authorization` or `X-Api-Key`. A request that includes both is rejected before any lookup, including when one of them is empty or malformed. Operator routes take `Authorization: Bearer $HYPERMESH_GATEWAY_SERVICE_SECRET` and require `X-Tenant-ID`.
 
-`bash scripts/check-package.sh --fixtures` runs the existing source, fresh-wheel
-and rebuilt-source-archive consumers without private Git credentials. Fixtures
-are built from exact source revisions; the manifest records those revisions,
-wheel digests and build provenance. The verifier checks
-root metadata, the complete active lock graph and transitive wheel metadata.
-Explicit private extras and unrecognized conditional pins fail closed.
+## Practical use
 
-The read-only pull-request workflow retains tested wheels, source archives and
-artifact-derived runtime and installer contracts as Actions artifacts. It does
-not publish releases. The dependency graph uses public repositories at immutable Git pins and
-matching artifacts. The owner version remains 0.1.0; coordinated owner-version
-adoption and stable release acceptance remain unfinished.
+Python 3.13 and [uv](https://docs.astral.sh/uv/) 0.11.26. Dependencies are public Git pins; `uv sync --frozen` needs network access to GitHub and no extra credentials.
 
-`releases/qualification` records a verified prior immutable test snapshot and its
-original Actions provenance. It is qualification evidence, not an accepted stable
-release, and must not configure the stable release baseline variable.
-`releases/prepared` identifies the exact prepared wheel by digest. Package tests
-verify that binding and compare the rebuilt source archive's contract. Contracts
-include runtime resources, Python constraints, dependencies, extras and entry
-points. An explicit qualification-only transition lists the old and new
-pins and binds them to the complete fixture graph. Runtime bytes, Python
-constraints, registry requirements, extras and entry points must remain unchanged.
-Source, installed-wheel and rebuilt-archive consumers qualify this exact graph;
-this does not waive stable admission or authorize arbitrary dependency changes.
-Existing owner test boundaries and live/provider qualification requirements apply.
+```bash
+git clone https://github.com/hyperme-sh/hypermesh-gateway.git
+cd hypermesh-gateway
+uv sync --frozen
+```
 
-## Test qualification and stable acceptance
+### Process only
 
-GitHub `test-<commit>` prereleases are development snapshots. Their embedded
-package version does not reserve a stable version. Artifact and consumer evidence
-belongs under `releases/qualification`. Owning-package and artifact validation
-remain separate from stable release admission. Future test receipts must carry
-an explicit non-stable classification.
+Leave the control-plane credential unset. The process starts with an in-process stand-in (empty ticket cache) and can serve health, version, and OpenAPI. Set the refresh interval to `0` so it does not poll that stand-in, and skip WireGuard commands:
 
-`releases/accepted` and `SPANOPTICON_RELEASE_BASELINE_SHA` are reserved for an
-actual immutable stable GitHub release. The pinned shared guard verifies the live
-release channel, stable tag source and asset digests; a test snapshot cannot
-become accepted through a provenance label. No stable baseline is recorded until
-that release exists. Stable publication remains closed without a valid baseline;
-first stable bootstrap and coordinated release qualification remain separate.
-No stable version, approval prerequisite or deployment is introduced here.
+```bash
+export HYPERMESH_WG_APPLY=0
+export HYPERMESH_ASSIGNMENT_REFRESH_S=0
+uv run python -m hypermesh_gateway_service.main
+```
 
-### Actions qualification and stable publication
+```bash
+curl -sS http://127.0.0.1:8000/api/v1/health/
+curl -sS http://127.0.0.1:8000/version
+curl -sS http://127.0.0.1:8000/openapi.json
+```
 
-Main merges and workflow completion do not publish GitHub test releases. Exact
-qualification files remain in Actions artifacts with finite retention. The pinned
-publisher independently verifies a real immutable stable baseline and refuses
-qualification snapshots, even if a caller job reports success. Existing valid
-stable records are retained; no release, version change, deployment or human
-approval prerequisite is introduced by this correction.
+The server listens on `HOST` (default `0.0.0.0`) and `PORT` (default `8000`).
 
-## Standalone runtime image
+### Control plane and WireGuard
 
-Use the owner Dockerfile and the package-qualified wheel inputs. The runtime
-includes `iproute2` and `wireguard-tools`; its entrypoint refuses to start if
-`ip` or `wg` cannot be found. A Python-only gateway image cannot implement the
-allocated WireGuard peers and must not replace this runtime.
+Use the gateway credential the control plane issued for this deployment, the tenant ids this gateway should watch, and a host that has `/dev/net/tun`, `CAP_NET_ADMIN`, `ip`, and `wg`.
 
-    export RELEASE_ARTIFACT_DIR="$(mktemp -d)"
-    bash scripts/check-package.sh --fixtures
-    bash scripts/check-runtime-image.sh
+```bash
+export HOST=0.0.0.0
+export PORT=8000
+export HYPERMESH_CONTROL_PLANE_URL=https://control-plane.example
+export HYPERMESH_GATEWAY_SERVICE_SECRET=hm_gw_replace_me
+export HYPERMESH_TENANT_IDS=00000000-0000-0000-0000-000000000000
+export HYPERMESH_ASSIGNMENT_REFRESH_S=30
+export HYPERMESH_WG_APPLY=1
+export HYPERMESH_WG_IFACE=wg-hm
+export HYPERMESH_WG_LISTEN_PORT=51820
+export HYPERMESH_WG_GATEWAY_ADDR=10.77.0.1/24
+uv run python -m hypermesh_gateway_service.main
+```
 
-The image context contains the checked owner wheel, digest-verified existing
-dependency artifacts from public owners matching the complete lock graph, hash-locked public
-runtime requirements and an input manifest. No Git/deployment credentials or
-source checkout enter the context. It installs wheels in a fresh container
-interpreter; it does not copy an editable checkout or host virtual environment.
-Source, wheel and rebuilt archive qualification still precede the container
-checks. The owner Python runtime and its pinned dependency graph are unchanged.
+Replace the URL, secret, and tenant id. `HYPERMESH_WG_APPLY` values `0`, `false`, and `no` skip `wg` and `ip`, as does a missing `/dev/net/tun`.
 
-CI runs both binaries' version commands, imports the installed gateway, and
-checks that hiding the required tools makes startup fail. These checks are
-networkless and have no NET_ADMIN or tun device; they never configure WireGuard
-or contact hosts/providers. Real peer application, handshake and overlay traffic
-remain post-deployment acceptance gates.
+Pull the assignment by hand (the same pull the refresh loop performs):
 
-Main CI retains its tested runtime archive, archive SHA256, local image reference
-and input manifest as Actions artifacts. It does not publish a registry image,
-create a tag/release or deploy anything. Any subsequent approved publication must
-load those exact retained bytes and verify the source label and archive checksum;
-it must not rebuild or overwrite an existing published candidate. Normal gateway
-deployment still supplies its existing NET_ADMIN, tun, credentials and port
-configuration; this Dockerfile grants no host capabilities or ports.
+```bash
+curl -sS -X POST http://127.0.0.1:8000/api/v1/hypermesh-gateway/tunnels/apply \
+  -H "Authorization: Bearer $HYPERMESH_GATEWAY_SERVICE_SECRET" \
+  -H "X-Tenant-ID: $TENANT_ID"
+```
+
+### Chat
+
+`model` is the lease catalog id. Omit `lease_id` to use the tenant’s active lease (the most recently activated when several honor). Set it in the JSON body or in `X-Hypermesh-Lease-Id` / `X-Lease-Id` to pin one lease.
+
+```bash
+curl -sS http://127.0.0.1:8000/v1/models \
+  -H "Authorization: Bearer $RENTER_API_KEY"
+
+curl -sS http://127.0.0.1:8000/v1/chat/completions \
+  -H "Authorization: Bearer $RENTER_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "catalog-id",
+    "messages": [{"role": "user", "content": "Hello"}]
+  }'
+```
+
+An API key may be sent as `X-Api-Key` instead of `Authorization`. An optional `X-Tenant-ID` must match the tenant on the credential. Outside local development the gateway rechecks API keys with the API-keys service (`HYPERMESH_API_KEYS_URL`, default `http://api-keys-service:8000`). `HYPERMESH_DEV=1` or `FASTAPI_ENV=development` skips that live check; `HYPERMESH_REQUIRE_KEY_VALIDATE=1` forces it.
+
+### Configuration
+
+| Variable | Default | Role |
+| --- | --- | --- |
+| `HYPERMESH_CONTROL_PLANE_URL` | `http://hypermesh-service:8000` | Control plane base URL |
+| `HYPERMESH_GATEWAY_SERVICE_SECRET` | empty | Bearer credential for pulls and operator routes. Empty selects the stand-in plane |
+| `HYPERMESH_TENANT_IDS` | marketplace tenant | Comma-separated tenant UUIDs to pull on boot |
+| `HYPERMESH_ASSIGNMENT_REFRESH_S` | `30` | Seconds between ticket and tunnel pulls. `0` disables the loop |
+| `HYPERMESH_WG_APPLY` | `1` | `0`, `false`, or `no` skips WireGuard commands |
+| `HYPERMESH_WG_IFACE` | `wg-hm` | WireGuard interface |
+| `HYPERMESH_WG_LISTEN_PORT` | `51820` | UDP listen port |
+| `HYPERMESH_WG_GATEWAY_ADDR` | `10.77.0.1/24` | Address on that interface |
+| `HYPERMESH_WG_HANDSHAKE_STALE_S` | `180` | Handshake older than this counts the peer down |
+| `HYPERMESH_CHAT_UPSTREAM_PORT` | `8080` | Host chat port on the overlay address |
+| `HYPERMESH_CHAT_READ_TIMEOUT_S` | `1800` | Upstream read timeout. `none` waits with no read limit |
+| `HYPERMESH_MAX_BODY_BYTES` | `8388608` | Request body cap (413 `request_too_large`) |
+| `HYPERMESH_CHAT_RATE_LIMIT` | `60` | Requests per lease per window |
+| `HYPERMESH_CHAT_RATE_WINDOW_S` | `60` | Rate-limit window in seconds |
+| `HYPERMESH_CHAT_BYTES_QUOTA` | `0` | Per-lease byte cap. `0` sets no byte cap |
+| `HYPERMESH_SAFETY_SCREENING` | `on` | `on` or `off`. Screens every chat request on both doors |
+| `HYPERMESH_GATEWAY_CORS_ORIGINS` | hyperme.sh and local dev origins | Comma-separated browser origins |
+| `AIUDITOR_SERVICE_URL` | unset | Where an IR classify hold files an approval |
+| `HYPERMESH_IR_TAXONOMY_PACK` | bundled v1 pack | Override path for the IR taxonomy JSON |
+| `HYPERMESH_DATA_DIR` | unset | Directory for IR receipts |
+| `HOST` / `PORT` | `0.0.0.0` / `8000` | Bind address and port |
+
+`HYPERMESH_SAFETY_ACTION_SELF_HARM`, `HYPERMESH_SAFETY_ACTION_MALWARE_INTRUSION`, and `HYPERMESH_SAFETY_ACTION_VIOLENT_EXTREMISM` are `allow` or `block` (both still record a flag). Child sexual abuse material is always blocked.
+
+### Runtime image
+
+Build the image from a qualified wheel. The Dockerfile expects the context produced by `scripts/prepare-runtime-context.py`, which `scripts/check-runtime-image.sh` prepares:
+
+```bash
+export RELEASE_ARTIFACT_DIR="$(mktemp -d)"
+bash scripts/check-package.sh
+bash scripts/check-runtime-image.sh
+```
+
+The image includes `iproute2` and `wireguard-tools`. Its entrypoint exits if `ip` or `wg` is missing. Deployment supplies `NET_ADMIN`, `/dev/net/tun`, the gateway credential, and published ports. See [Releasing](docs/releasing.md).
+
+## How Hypermesh uses it
+
+Hypermesh leases a host to a renter. The control plane is the broker: it assigns this gateway and that host, signs a lease ticket, and stores the tunnel (gateway private key, host public key, overlay address, public endpoint).
+
+This gateway is the data plane for that lease.
+
+1. **Lease tickets in.** Every `HYPERMESH_ASSIGNMENT_REFRESH_S` seconds, for each id in `HYPERMESH_TENANT_IDS` (the marketplace tenant when unset), the process calls:
+   - `GET /api/v1/hypermesh/gateway/tickets`
+   - `GET /api/v1/hypermesh/gateway/tunnels`
+
+   Both use `Authorization: Bearer $HYPERMESH_GATEWAY_SERVICE_SECRET` and `X-Tenant-ID`. The cache stores the signed ticket, catalog id, host certification state, key fingerprints, and revoked lease and key ids. A cross-tenant key index (`GET /api/v1/hypermesh/internal/renter-key-index`) lets an API key find its tenant.
+
+2. **Tunnel up.** For each tunnel with status `allocated`, the gateway installs one WireGuard peer per host on `wg-hm` (listen UDP `51820`, address `10.77.0.1/24` unless overridden). Lease start and lease stop leave that peer in place. The peer is removed when the tunnel status is `revoked` and no allocated tunnel still uses that host key, which covers host teardown such as failed certification or device revocation.
+
+3. **Chat across the tunnel.** The renter (a portal JWT, or an application holding a renter API key) calls `POST /v1/chat/completions`. The gateway maps the credential to the tenant, picks the lease, and honors the cached ticket in process. Host certification on the ticket must be green, an uploaded catalog must be admitted, and the WireGuard handshake must be fresh. The completion is then proxied to the host’s overlay address on port `8080`. The host answers there; the renter never opens the host directly.
+
+4. **Accounted back.** After the stream, queued byte and handshake counters are posted to `POST /api/v1/hypermesh/gateway/metrics`. A safety flag, when screening records one, is posted to `POST /api/v1/hypermesh/gateway/safety-flags`. A later ticket pull that lists the lease as revoked makes the next completion fail the local ticket check.
+
+The IR door (`POST /v1/ir/chat/completions`) is the same tunnel and the same ticket cache, for IR purposes. It classifies the prompt with the taxonomy pack and can file an approval at `AIUDITOR_SERVICE_URL` when org policy holds the request. Receipts for that door are local to this process (`GET /v1/ir/receipts`).
+
+## Develop and test
+
+```bash
+uv sync --frozen
+uv run pytest
+bash scripts/check-package.sh
+```
+
+`scripts/check-package.sh` runs the suite from the checkout, from a clean install of the built wheel, and from a wheel rebuilt out of the source distribution. Tests use a fake control plane, mocked HTTP hosts, and mocked command execution. They do not configure WireGuard, enroll hosts, or call upstream model servers. For a checkout you are editing by hand, keep `HYPERMESH_WG_APPLY=0` and `HYPERMESH_ASSIGNMENT_REFRESH_S=0`.
+
+Package qualification, the runtime image, and stable tags are described in [Releasing](docs/releasing.md).
+
+## Release and versioning
+
+The package version is **0.1.0** (`pyproject.toml`). The release line in `release-policy.json` is **0.1**. A stable release is a `vMAJOR.MINOR.PATCH` tag admitted against an immutable baseline, then published from the exact artifacts the package workflow already tested. Day-to-day pushes to `main` retain those artifacts and do not publish a release. Details, including development `test-<commit>` snapshots and the runtime image, are in [Releasing](docs/releasing.md). The admission checklist is in [Release compatibility](docs/release-policy.md).
+
+## License
+
+Apache License 2.0. See [LICENSE](LICENSE).
