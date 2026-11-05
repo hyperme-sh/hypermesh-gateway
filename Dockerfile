@@ -2,6 +2,7 @@
 # Build only the context produced by scripts/prepare-runtime-context.py.
 FROM ghcr.io/astral-sh/uv:python3.13-bookworm-slim@sha256:531f855bda2c73cd6ef67d56b733b357cea384185b3022bd09f05e002cd144ca AS builder
 WORKDIR /app
+ENV UV_HTTP_TIMEOUT=120
 COPY requirements.txt /packages/requirements.txt
 COPY wheels/ /packages/wheels/
 RUN uv venv --python /usr/local/bin/python /app/.venv \
