@@ -60,14 +60,14 @@ acceptance and runtime deployment remain separate.
 
 `bash scripts/check-package.sh --fixtures` runs the existing source, fresh-wheel
 and rebuilt-source-archive consumers without private Git credentials. Fixtures
-are verified existing 0.24 dependency artifacts; the manifest records their exact
-source revisions, digests and original Actions provenance. The verifier checks
+are built from exact source revisions; the manifest records those revisions,
+wheel digests and build provenance. The verifier checks
 root metadata, the complete active lock graph and transitive wheel metadata.
 Explicit private extras and unrecognized conditional pins fail closed.
 
 The read-only pull-request workflow retains tested wheels, source archives and
 artifact-derived runtime and installer contracts as Actions artifacts. It does
-not publish releases. The private dependency graph is prepared on 0.24 using immutable Git pins and
+not publish releases. The dependency graph uses public repositories at immutable Git pins and
 matching artifacts. The owner version remains 0.1.0; coordinated owner-version
 adoption and stable release acceptance remain unfinished.
 
@@ -77,8 +77,8 @@ release, and must not configure the stable release baseline variable.
 `releases/prepared` identifies the exact prepared wheel by digest. Package tests
 verify that binding and compare the rebuilt source archive's contract. Contracts
 include runtime resources, Python constraints, dependencies, extras and entry
-points. An explicit qualification-only transition lists the old and new private
-pins and binds them to the complete 0.24 fixture graph. Runtime bytes, Python
+points. An explicit qualification-only transition lists the old and new
+pins and binds them to the complete fixture graph. Runtime bytes, Python
 constraints, registry requirements, extras and entry points must remain unchanged.
 Source, installed-wheel and rebuilt-archive consumers qualify this exact graph;
 this does not waive stable admission or authorize arbitrary dependency changes.
@@ -121,7 +121,7 @@ allocated WireGuard peers and must not replace this runtime.
     bash scripts/check-runtime-image.sh
 
 The image context contains the checked owner wheel, digest-verified existing
-private dependency artifacts matching the complete lock graph, hash-locked public
+dependency artifacts from public owners matching the complete lock graph, hash-locked public
 runtime requirements and an input manifest. No Git/deployment credentials or
 source checkout enter the context. It installs wheels in a fresh container
 interpreter; it does not copy an editable checkout or host virtual environment.
