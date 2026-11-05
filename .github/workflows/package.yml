@@ -12,7 +12,25 @@ jobs:
       group: shared-local
       labels: [self-hosted, linux, x64]
     timeout-minutes: 15
+    environment: controlplane-libs-read
     steps:
+      - name: Mint repository-scoped dependency token
+        id: dependency-token
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3
+        with:
+          app-id: ${{ vars.CONTROLPLANE_LIBS_APP_ID }}
+          private-key: ${{ secrets.CONTROLPLANE_LIBS_APP_PRIVATE_KEY }}
+          owner: hyperme-sh
+          permission-contents: read
+          repositories: |
+            controlplane-api
+            controlplane-core
+            controlplane-db
+            controlplane-events
+            controlplane-identity
+            controlplane-tenancy
+            hypermesh-ticket
+            user-service
       - name: Prepare release output
         run: echo "RELEASE_ARTIFACT_DIR=$(mktemp -d "$RUNNER_TEMP/release-dist.XXXXXX")" >> "$GITHUB_ENV"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -24,7 +42,7 @@ jobs:
           python-version: '3.13'
       - name: Validate Hypermesh gateway package
         env:
-          DEPENDENCY_READ_TOKEN: ${{ secrets.DEPENDENCY_READ_TOKEN }}
+          DEPENDENCY_READ_TOKEN: ${{ steps.dependency-token.outputs.token }}
         shell: bash
         run: |
           set -euo pipefail
