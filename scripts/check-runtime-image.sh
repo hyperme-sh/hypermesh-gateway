@@ -3,13 +3,24 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 : "${RELEASE_ARTIFACT_DIR:?Run package qualification and retain its exact wheels first}"
 scratch=$(mktemp -d)
-image="hypermesh-gateway:qualification-${GITHUB_RUN_ID:-local}-${GITHUB_RUN_ATTEMPT:-1}"
+image="hypermesh-gateway:qualification-${GITHUB_RUN_ID:-local}-${GITHUB_RUN_ATTEMPT:-1}-${BASHPID}"
+probe=''
 cleanup() {
+  if [[ -n "$probe" ]]; then rm -f "$probe"; fi
   docker image rm "$image" >/dev/null 2>&1 || true
   rm -rf "$scratch"
 }
 trap cleanup EXIT
 source_sha=$(git rev-parse HEAD)
+probe=$(mktemp "$PWD/scripts/runtime-input-probe.XXXXXX")
+if python3 scripts/prepare-runtime-context.py --artifacts "$RELEASE_ARTIFACT_DIR" \
+    --output "$scratch/rejected-context" --source-sha "$source_sha" >"$scratch/untracked.out" 2>&1; then
+  echo 'Untracked runtime input was accepted' >&2
+  exit 1
+fi
+grep -F 'Runtime inputs include changes outside the selected source commit' "$scratch/untracked.out" >/dev/null
+rm -f "$probe"
+probe=''
 python3 scripts/prepare-runtime-context.py --artifacts "$RELEASE_ARTIFACT_DIR" \
   --output "$scratch/context" --source-sha "$source_sha"
 built_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
