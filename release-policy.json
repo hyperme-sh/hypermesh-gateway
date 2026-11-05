@@ -2,7 +2,7 @@
   "schema_version": 1,
   "repository": "hyperme-sh/hypermesh-gateway",
   "component": "hypermesh-gateway",
-  "line": "0.24",
+  "line": "0.1",
   "version_files": [
     "pyproject.toml"
   ]

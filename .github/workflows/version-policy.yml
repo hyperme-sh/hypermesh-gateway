@@ -1,0 +1,17 @@
+name: Version authority
+on:
+  pull_request:
+  push:
+    branches: [main]
+    tags: ['**']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  version-policy:
+    runs-on: [self-hosted, linux, x64, debrunner]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - run: python3 scripts/check-version-policy.py
