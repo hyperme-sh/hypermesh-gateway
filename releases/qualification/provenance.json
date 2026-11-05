@@ -1,0 +1,23 @@
+{
+  "repository": "hyperme-sh/hypermesh-gateway",
+  "revision": "ede9ceee132996ff5d4c141f6b87fd13af98320c",
+  "release_id": 434633594,
+  "immutable": true,
+  "tag": "test-ede9ceee132996ff5d4c141f6b87fd13af98320c",
+  "run_id": 41943854730,
+  "artifact_id": 13377189093,
+  "assets": {
+    "hypermesh_gateway_service-0.1.0-py3-none-any.whl": "sha256:8f463ba6e702b785e7f952f5403400db548b104f3faacd633679706b73474204",
+    "hypermesh_gateway_service-0.1.0.tar.gz": "sha256:8d576e87191af2dd1841576ab2da8fd9c14c1a477cf63a7b05dae20a21c8ce1a"
+  },
+  "published_release_url": "https://github.com/hyperme-sh/hypermesh-gateway/releases/tag/test-ede9ceee132996ff5d4c141f6b87fd13af98320c",
+  "checks": [
+    "successful same-repository main-push package run",
+    "live Actions artifact digest",
+    "release bytes equal tested bytes",
+    "immutable release and tag revision",
+    "asset digests equal manifest"
+  ],
+  "classification": "development_snapshot",
+  "stable_acceptance": false
+}
