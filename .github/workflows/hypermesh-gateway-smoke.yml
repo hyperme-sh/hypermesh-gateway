@@ -1,0 +1,59 @@
+# Revision identity for the gateway post-deploy smoke.
+# A running service matches when its git sha is the reviewed FyberLabs/infra
+# owner pin or the image published in the fleet manifest. The fallback pin
+# file is gateway-owner-pins.json beside this workflow. Infra is read with
+# GET only. This job does not deploy, mint a renter key, or open a lease.
+#
+# Dispatch from main is the only trigger. Pull requests and branch pushes
+# do not run it. The archived panopticon GHCR workflow cannot workflow_run
+# a file in this repository.
+name: Hypermesh gateway smoke
+run-name: Hypermesh gateway smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      expect_revision:
+        description: >-
+          deploy/test sha to wait for. Empty records the deployed revision
+          and does not wait.
+        required: false
+        default: ""
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hypermesh-gateway-smoke
+  cancel-in-progress: false
+
+jobs:
+  smoke:
+    name: revision pin or manifest
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    runs-on: ${{ github.event.repository.private && fromJSON('["self-hosted", "linux", "x64", "debrunner"]') || 'ubuntu-24.04' }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - name: Check the deployed revision
+        env:
+          EVIDENCE_DIR: ${{ github.workspace }}/hypermesh-smoke-evidence
+          HYPERMESH_SMOKE_EXPECT_REVISION: ${{ inputs.expect_revision }}
+          HYPERMESH_SMOKE_FLEET_REPOSITORY: FyberLabs/panopticon
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$EVIDENCE_DIR"
+          python3 scripts/gateway_post_deploy_smoke.py --evidence-dir "$EVIDENCE_DIR"
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: hypermesh-gateway-smoke-evidence
+          path: hypermesh-smoke-evidence/
+          if-no-files-found: warn
+          retention-days: 14
