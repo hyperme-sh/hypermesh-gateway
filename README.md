@@ -45,27 +45,16 @@ network integration need separate qualification before deployment.
 
 ## Release channels
 
-Successful main-push validation retains the validated Python wheel and source distribution and publishes
-an immutable `test-<commit>` GitHub prerelease. Push a `vMAJOR.MINOR.PATCH`
-tag at that tested commit to promote the exact files to a stable release,
-without rebuilding. Repository visibility applies to all package assets.
-Package metadata versions are preserved; these are GitHub distribution snapshots,
-not automatic PyPI publication or service deployment.
+Main validation retains its exact qualified files in Actions artifacts. It does
+not create GitHub releases or tags. Historical `test-<commit>` prereleases remain
+qualification evidence and do not establish an accepted stable release.
 
-Promotion requires the original Actions artifact (90-day requested retention;
-organization policy may shorten it). Expired evidence fails closed: validate a
-new main revision. The publisher verifies the run, source, workflow and artifact
-digest independently of release metadata. Repository immutable releases must be
-enabled. See the [shared release contract](https://github.com/hyperme-sh/.github/blob/7749591fccd30d46ba9b0adabe82114001c9d0de/actions/release-channel/README.md).
-
-The credential-attribution regressions adopted from Panopticon #702 exercise
-both renter and IR chat paths, including edge-prefixed aliases. Dual-header
-requests must stop before key validation, approval lookup, receipt creation,
-safety attribution or host calls. A single valid IR key must own the approval,
-receipt and safety subject. The equivalent runtime guard was already present
-in the standalone import; these tests qualify that behavior without replacing it.
-The source's retirement-aware bootstrap verifier is not yet adopted and remains
-part of issue #18's separate closure work.
+Stable publication requires an explicit `vMAJOR.MINOR.PATCH` tag, the exact
+successful main validation artifact, compatible declared contracts and an actual
+immutable stable baseline. The publisher independently verifies that evidence;
+successful caller jobs alone cannot establish acceptance. Missing evidence and
+first-stable bootstrap remain closed. Package qualification, coordinated consumer
+acceptance and runtime deployment remain separate.
 
 ## Test qualification and stable acceptance
 
@@ -82,3 +71,12 @@ become accepted through a provenance label. No stable baseline is recorded until
 that release exists. Stable publication remains closed without a valid baseline;
 first stable bootstrap and coordinated release qualification remain separate.
 No stable version, approval prerequisite or deployment is introduced here.
+
+### Actions qualification and stable publication
+
+Main merges and workflow completion do not publish GitHub test releases. Exact
+qualification files remain in Actions artifacts with finite retention. The pinned
+publisher independently verifies a real immutable stable baseline and refuses
+qualification snapshots, even if a caller job reports success. Existing valid
+stable records are retained; no release, version change, deployment or human
+approval prerequisite is introduced by this correction.
