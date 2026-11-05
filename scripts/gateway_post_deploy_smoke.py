@@ -102,11 +102,35 @@ def _format_seconds(elapsed: float) -> str:
     return f"{elapsed:.1f}"
 
 
+class RevisionError(ValueError):
+    """A dispatcher asked for a revision that is not a full commit sha."""
+
+    def __init__(self, requested: str) -> None:
+        self.requested = requested
+        super().__init__(
+            "HYPERMESH_SMOKE_EXPECT_REVISION "
+            f"{requested!r} is not a full 40-character commit sha"
+        )
+
+
 def expected_revision(raw: str | None = None) -> str:
-    """Deploy sha to wait for. Empty records the header and does not wait."""
+    """Deploy sha to wait for. Empty records the header and does not wait.
+
+    A nonempty value that is not a full 40-character commit sha is rejected.
+    It is not treated as an omitted revision.
+    """
 
     text = os.environ.get("HYPERMESH_SMOKE_EXPECT_REVISION", "") if raw is None else raw
-    return _sha(text)
+    if not isinstance(text, str):
+        raise RevisionError(type(text).__name__)
+    stripped = text.strip()
+    if not stripped:
+        return ""
+    sha = _sha(stripped)
+    if not sha:
+        shown = stripped if len(stripped) <= 80 else stripped[:80] + "…"
+        raise RevisionError(shown)
+    return sha
 
 
 def rollout_wait_s() -> float:
@@ -595,7 +619,20 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--evidence-dir", type=Path, required=True)
     parser.add_argument("--api-base", default=os.environ.get("HYPERMESH_SMOKE_API_BASE", API_BASE))
     args = parser.parse_args(argv)
-    expected = expected_revision()
+    try:
+        expected = expected_revision()
+    except RevisionError as exc:
+        result = RolloutResult(
+            status="fail",
+            detail=str(exc),
+            deployed="",
+            expected=exc.requested,
+            elapsed_s=0.0,
+            http_status=0,
+        )
+        write_evidence(args.evidence_dir / "gateway-rollout.json", result, pin_origin="not_loaded")
+        print(result.detail, file=sys.stderr)
+        return 1
     pins, origin = load_owner_pins_from()
     repo = fleet_repository()
     token = _github_token()

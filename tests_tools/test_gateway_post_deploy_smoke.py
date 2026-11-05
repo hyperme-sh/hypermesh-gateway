@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import sys
 from pathlib import Path
+
+import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW = ROOT / ".github" / "workflows" / "hypermesh-gateway-smoke.yml"
@@ -409,6 +412,37 @@ def test_manifest_fetch_stays_on_github(monkeypatch) -> None:
 
     monkeypatch.setattr(smoke.urllib.request, "urlopen", urlopen)
     assert smoke._github_get("https://evil.example/image-manifest.json", "sekret", 1) is None
+
+
+def test_blank_expected_revision_is_record_only(monkeypatch: pytest.MonkeyPatch) -> None:
+    assert smoke.expected_revision("") == ""
+    assert smoke.expected_revision("   ") == ""
+    monkeypatch.delenv("HYPERMESH_SMOKE_EXPECT_REVISION", raising=False)
+    assert smoke.expected_revision() == ""
+    monkeypatch.setenv("HYPERMESH_SMOKE_EXPECT_REVISION", "  ")
+    assert smoke.expected_revision() == ""
+    assert smoke.expected_revision("A" * 40) == "a" * 40
+
+
+def test_abbreviated_expected_revision_is_rejected(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("HYPERMESH_SMOKE_EXPECT_REVISION", "  01d293e  ")
+
+    def opened(*_args, **_kwargs):
+        raise AssertionError("network")
+
+    monkeypatch.setattr(smoke.urllib.request, "urlopen", opened)
+    monkeypatch.setattr(smoke, "load_owner_pins_from", opened)
+    monkeypatch.setattr(smoke, "check_rollout", opened)
+    code = smoke.main(["--evidence-dir", str(tmp_path)])
+    document = json.loads((tmp_path / "gateway-rollout.json").read_text(encoding="utf-8"))
+    assert code == 1
+    assert document["status"] == "fail"
+    assert document["expected_revision"] == "01d293e"
+    assert document["deployed_revision"] == ""
+    assert document["pin_origin"] == "not_loaded"
+    assert "01d293e" in document["detail"]
+    with pytest.raises(smoke.RevisionError):
+        smoke.expected_revision("zzzz" + "a" * 36)
 
 
 def test_snapshot_pin_accepts_the_recorded_hypermesh_sha() -> None:

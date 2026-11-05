@@ -15,8 +15,8 @@ on:
     inputs:
       expect_revision:
         description: >-
-          deploy/test sha to wait for. Empty records the deployed revision
-          and does not wait.
+          Full 40-character deploy/test sha to wait for. Empty records the
+          deployed revision and does not wait. Any other value fails.
         required: false
         default: ""
         type: string
