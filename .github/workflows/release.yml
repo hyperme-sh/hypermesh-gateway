@@ -13,7 +13,7 @@ jobs:
     if: github.event_name == 'push'
     uses: hyperme-sh/spanopticon/.github/workflows/component-release.yml@32c064be9fe47e230e0d48d353ada8b38a7c1644
     with:
-      release-line: '0.24'
+      release-line: '0.1'
       baseline-ref: ${{ vars.SPANOPTICON_RELEASE_BASELINE_SHA }}
       requested-version: ${{ github.ref_name }}
   publish:

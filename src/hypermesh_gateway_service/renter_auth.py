@@ -15,6 +15,8 @@ call require_tenant_bound_grant, which resolves the caller's real tenant.
 
 from __future__ import annotations
 
+import asyncio
+
 import hmac
 import logging
 import os
@@ -390,7 +392,7 @@ async def require_tenant_bound_grant(request: Request, tenant_id: uuid.UUID) -> 
     to another tenant. An unreachable or unconfigured api-keys-service denies.
     """
 
-    grant = require_renter_grant(request)
+    grant = await asyncio.to_thread(require_renter_grant, request)
     if grant.kind == "jwt":
         if not _tenant_claim_is(grant.claims, tenant_id):
             raise RenterUnauthorized()

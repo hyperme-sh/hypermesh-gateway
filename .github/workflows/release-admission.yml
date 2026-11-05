@@ -1,6 +1,6 @@
 name: Release admission
+# Development PRs use version-policy.yml and package tests, without release history.
 on:
-  pull_request:
   push:
     tags: ['**']
   workflow_dispatch:
@@ -15,6 +15,6 @@ jobs:
   release-admission:
     uses: hyperme-sh/spanopticon/.github/workflows/component-release.yml@32c064be9fe47e230e0d48d353ada8b38a7c1644
     with:
-      release-line: '0.24'
+      release-line: '0.1'
       baseline-ref: ${{ vars.SPANOPTICON_RELEASE_BASELINE_SHA }}
       requested-version: ${{ github.ref_type == 'tag' && github.ref_name || inputs.version || '' }}

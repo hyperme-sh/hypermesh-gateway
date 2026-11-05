@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+
 import logging
 import os
 import uuid
@@ -606,9 +608,9 @@ async def _authorize_caller(
     request: Request, *, ir: bool
 ) -> tuple[RenterGrant, uuid.UUID, str | None]:
     if ir:
-        grant = require_auditor_grant(request, bind_tenant_header=False)
+        grant = await asyncio.to_thread(require_auditor_grant, request, bind_tenant_header=False)
     else:
-        grant = require_renter_grant(request, bind_tenant_header=False)
+        grant = await asyncio.to_thread(require_renter_grant, request, bind_tenant_header=False)
     raw_key = presented_renter_key(request) if grant.kind == "api_key" else None
     if grant.kind == "api_key":
         if not raw_key:
