@@ -30,12 +30,16 @@ docker build --build-arg "SOURCE_SHA=$source_sha" --build-arg "BUILT_AT=$built_a
 docker run --rm --network none --cap-drop ALL --read-only \
   --env HYPERMESH_WG_APPLY=0 --env HYPERMESH_ASSIGNMENT_REFRESH_S=0 \
   "$image" /app/.venv/bin/python -I -c '
-import importlib, json, shutil, subprocess
+import importlib, importlib.util, json, shutil, subprocess
 assert shutil.which("ip") and shutil.which("wg")
 subprocess.run(["ip", "-Version"], check=True)
 subprocess.run(["wg", "--version"], check=True)
 module = importlib.import_module("hypermesh_gateway_service")
 assert "/site-packages/" in module.__file__
+assert importlib.util.find_spec("hypermesh_service") is None
+assert importlib.util.find_spec("controlplane_billing") is None
+import hypermesh_ticket
+assert "/site-packages/" in hypermesh_ticket.__file__
 from hypermesh_gateway_service.app import create_app
 assert create_app().openapi()["paths"]
 print(json.dumps({"installed_gateway": True, "wireguard_tools_available": True}))'

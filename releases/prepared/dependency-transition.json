@@ -44,17 +44,36 @@
     "hypermesh-ticket": "0.1.0"
   },
   "consumer_adaptations": {
+    "hypermesh_gateway_service/app.py": {
+      "before_sha256": "34ff191285b498687225b5c7aa597e747530b15d7109879a36de7a77d1e269ec",
+      "after_sha256": "345a27cb5e7ca6c7b173c0cbe87864537bf7f945f8caf3fe499fedec42a2e814",
+      "reason": "Mount router prompt verbs on the existing renter chat grant. Qualification only; not live acceptance.",
+      "regression_test": "tests/test_router_verbs.py"
+    },
+    "hypermesh_gateway_service/posture.py": {
+      "before_sha256": "d4adb4ee599c64af597e2eec69ddb62a496f36dd619c02a686253475eab727ec",
+      "after_sha256": "0ca1e035a990bc0ca753026b88d1ca210ffb24b2d1adccd55f2696f396505b83",
+      "reason": "Router verbs keep certificate checks and skip the WireGuard peer because they do not command the host.",
+      "regression_test": "tests/test_router_verbs.py"
+    },
     "hypermesh_gateway_service/renter_auth.py": {
       "before_sha256": "085f612fa7169ab97e4dca8fb532c09f4de16a0517865bfa9dde2f1be09c07dc",
-      "after_sha256": "ba63ce37b8f1fab01959aebfbcb82ba5b68fac03880cc2b84239f3f6dbd148b2",
-      "reason": "Run synchronous identity validation in a worker thread from async handlers; retain fail-closed lifecycle checks.",
-      "regression_test": "tests/test_async_lifecycle.py"
+      "after_sha256": "39f4c270bf3b023d493ec3203a8bd67a2b189b5797198acb64cfb764bf5668b0",
+      "reason": "Run synchronous identity validation in a worker thread from async handlers; scope router state to one credential subject.",
+      "regression_test": "tests/test_router_verbs.py"
     },
     "hypermesh_gateway_service/routes.py": {
       "before_sha256": "0c74b3e5ecd3cefe31a6475cecddf43bdcf571f932879b9d0c8be7b294ef5c92",
-      "after_sha256": "fbe104a8bef57276266ea530559e4b8821b5a202c4944a7294364227ebde3fd9",
-      "reason": "Run synchronous identity validation in a worker thread from async handlers; retain fail-closed lifecycle checks.",
-      "regression_test": "tests/test_async_lifecycle.py"
+      "after_sha256": "cf411c26e2094db7327377dff19b9f88a1ea79f6b777d1bd0619b32d862535bf",
+      "reason": "Apply router run control, routing, and prompt text on the existing chat doors before the host hop.",
+      "regression_test": "tests/test_router_verbs.py"
+    }
+  },
+  "added_files": {
+    "hypermesh_gateway_service/verbs.py": {
+      "sha256": "44cbc184d70f84d05a82befe3901b3021bf7862a8c9d1e82244657f1ff1d48c0",
+      "reason": "Process-local router prompt verbs. Unwired verbs return wired false and change nothing. Each caller can exclude at most 32 hosts.",
+      "regression_test": "tests/test_router_verbs.py"
     }
   }
 }

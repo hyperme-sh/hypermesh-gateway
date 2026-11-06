@@ -40,6 +40,9 @@ from hypermesh_gateway_service.routes import (
     router as hmg_router,
     seed_watched_tenants,
 )
+from hypermesh_gateway_service.verbs import RouterVerbStore
+from hypermesh_gateway_service.verbs import openai_router as verb_openai_router
+from hypermesh_gateway_service.verbs import router as verb_router
 from hypermesh_gateway_service.tickets import TicketCache
 
 logger = get_logger(__name__)
@@ -58,7 +61,10 @@ _OPENAPI_DESCRIPTION = (
     "a small set of severe categories. Nothing is stored for a request that "
     "is not flagged; a flagged request is recorded for operator review and "
     "allowed or blocked by category (400 content_policy_violation). "
-    "Host addresses are not published here. Test chat: https://chat.test.hyperme.sh"
+    "Host addresses are not published here. Test chat: https://chat.test.hyperme.sh "
+    "Router prompt verbs are POST /v1/router/verbs on the same renter grant and "
+    "lease ticket. Run control refuses new completions on this process. "
+    "Recipient acknowledgement is not delivered. See the gateway README."
 )
 
 
@@ -193,10 +199,13 @@ def create_app(
     # Outermost: refuse an oversized body before anything parses it.
     app.add_middleware(BodyLimitMiddleware)
 
+    app.state.verb_store = RouterVerbStore()
     app.include_router(health_router, prefix="/api/v1")
     app.include_router(version_router)
     app.include_router(hmg_router, prefix="/api/v1")
+    app.include_router(verb_router, prefix="/api/v1")
     app.include_router(openai_router)
+    app.include_router(verb_openai_router)
     add_optional_service_cors(
         app,
         env_var="HYPERMESH_GATEWAY_CORS_ORIGINS",
@@ -207,7 +216,7 @@ def create_app(
         ),
     )
     logger.info(
-        "Hypermesh gateway: health + /api/v1/hypermesh-gateway + /v1/chat/completions + /v1/ir"
+        "Hypermesh gateway: health + /api/v1/hypermesh-gateway + /v1/chat/completions + /v1/ir + /v1/router/verbs"
     )
     from controlplane_api.metrics import install_http_metrics
 
