@@ -14,4 +14,4 @@ jobs:
         with:
           persist-credentials: false
       - name: Reject provider-specific runtime symbols
-        run: python3 scripts/check_open_boundary.py src pyproject.toml
+        run: python3 scripts/check_open_boundary.py src edge-routes.json pyproject.toml
