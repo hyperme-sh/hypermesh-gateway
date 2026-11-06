@@ -27,12 +27,14 @@ bash scripts/check-package.sh
 
 ## What main retains
 
-`.github/workflows/package.yml` runs qualification on `main` and uploads two Actions artifacts:
+`.github/workflows/package.yml` runs qualification on a push to `main` and uploads two Actions artifacts:
 
-- `tested-dist` — the wheel and source archive from that run (retained 90 days)
-- `tested-runtime-image` — the runtime image archive, its SHA256, the local image reference, and the input manifest (retained 7 days)
+- `tested-dist` — the wheel and source archive from that run (retained 90 days). The stable publisher loads this artifact only. It rebuilds nothing and does not replace an artifact that was already published.
+- `tested-runtime-image` — the runtime image archive, its SHA256, the local image reference, and the input manifest (retained 3 days). No job downloads it. It is a short inspection copy of the image that qualification already built. The same push-to-`main` condition gates the upload. `workflow_dispatch` still runs the checks and does not upload the image.
 
-A later publication loads those bytes. It rebuilds nothing and does not replace an artifact that was already published. A merge to `main` stores the artifacts. It does not create a Git tag or a GitHub Release.
+A merge to `main` stores those artifacts. It does not create a Git tag or a GitHub Release.
+
+Pull-request preparation (`.github/workflows/preparation.yml`) runs the same package and runtime-image checks in the job. It does not upload `prepared-dist` or the image archive.
 
 ## Development snapshots
 
@@ -43,7 +45,7 @@ GitHub releases named `test-<commit>` are development snapshots. The package ver
 Push a tag `vMAJOR.MINOR.PATCH` that matches the package version on the admitted commit. `.github/workflows/release.yml` then:
 
 1. Runs the shared component-release workflow in [hyperme-sh/spanopticon](https://github.com/hyperme-sh/spanopticon) (pinned in the workflow file) with release line `0.1` and baseline repository variable `SPANOPTICON_RELEASE_BASELINE_SHA`.
-2. On admission success, runs the pinned package publisher. The publisher reads the package workflow’s retained artifacts and attaches those bytes to the release.
+2. On admission success, runs the pinned package publisher. The publisher reads the package workflow’s retained `tested-dist` artifact and attaches those bytes to the release. The runtime image archive is not part of that handoff.
 
 `SPANOPTICON_RELEASE_BASELINE_SHA` is the full 40-character commit SHA of an accepted stable release whose bundle is `releases/accepted/release.json`. Admission stops when that variable is unset or does not point at an accepted baseline. The first baseline needs the qualified artifacts, consumer runs, and provenance from a real release. Example digests are not evidence.
 
