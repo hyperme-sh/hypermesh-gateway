@@ -34,12 +34,13 @@ jobs:
           export RUNTIME_IMAGE_OUTPUT_DIR="$output"
           bash scripts/check-runtime-image.sh
       - name: Retain the exact tested runtime image
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: tested-runtime-image
           path: ${{ env.RUNTIME_IMAGE_OUTPUT_DIR }}/*
           if-no-files-found: error
-          retention-days: 7
+          retention-days: 3
           compression-level: 0
       - name: Retain validated package bytes
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'

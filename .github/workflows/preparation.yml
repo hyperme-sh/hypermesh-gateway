@@ -1,3 +1,6 @@
+# Pull requests qualify the package and runtime image in this job.
+# The image archive stays on the runner. Nothing downloads prepared-dist,
+# so this workflow does not upload it.
 name: Package preparation
 on:
   pull_request:
@@ -30,11 +33,3 @@ jobs:
           export RELEASE_ARTIFACT_DIR="$PREPARED_OUTPUT/dist"
           export RUNTIME_IMAGE_OUTPUT_DIR="$PREPARED_OUTPUT/runtime"
           bash scripts/check-runtime-image.sh
-      - name: Retain tested preparation bytes
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: prepared-dist
-          path: ${{ env.PREPARED_OUTPUT }}/*
-          if-no-files-found: error
-          retention-days: 30
-          compression-level: 0
