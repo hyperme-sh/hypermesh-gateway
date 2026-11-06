@@ -129,9 +129,13 @@ The server listens on `HOST` (default `0.0.0.0`) and `PORT` (default `8000`).
 
 ### Control plane and WireGuard
 
+Before startup, securely inject `HYPERMESH_TICKET_HMAC_KEY` from the deployment secret store. It must match the control plane ticket-signing key; the gateway service credential is not a substitute. Do not generate an independent gateway key or commit/log the value. Missing verification trust prevents valid tickets from authorizing chat.
+
 Use the gateway credential the control plane issued for this deployment, the tenant ids this gateway should watch, and a host that has `/dev/net/tun`, `CAP_NET_ADMIN`, `ip`, and `wg`.
 
 ```bash
+: "${HYPERMESH_TICKET_HMAC_KEY:?Inject the control plane ticket-verification key securely first}"
+export HYPERMESH_TICKET_HMAC_KEY
 export HOST=0.0.0.0
 export PORT=8000
 export HYPERMESH_CONTROL_PLANE_URL=https://control-plane.example
@@ -179,6 +183,7 @@ An API key may be sent as `X-Api-Key` instead of `Authorization`. An optional `X
 | Variable | Default | Role |
 | --- | --- | --- |
 | `HYPERMESH_CONTROL_PLANE_URL` | `http://hypermesh-service:8000` | Control plane base URL |
+| `HYPERMESH_TICKET_HMAC_KEY` | required for operational ticket verification | Secret matching the control plane ticket-signing key; inject securely before startup |
 | `HYPERMESH_GATEWAY_SERVICE_SECRET` | empty | Bearer credential for pulls and operator routes. Empty selects the stand-in plane |
 | `HYPERMESH_TENANT_IDS` | marketplace tenant | Comma-separated tenant UUIDs to pull on boot |
 | `HYPERMESH_ASSIGNMENT_REFRESH_S` | `30` | Seconds between ticket and tunnel pulls. `0` disables the loop |
