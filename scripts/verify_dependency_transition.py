@@ -51,6 +51,19 @@ def verify(before_path, after_path, transition_path, fixture_path):
         digest = change['after_sha256']
         require(len(digest) == 64 and all(c in '0123456789abcdef' for c in digest), 'Invalid consumer adaptation digest')
         runtime[path] = digest
+    for path, change in transition.get('added_files', {}).items():
+        parts = Path(path).parts
+        require(
+            bool(parts) and not path.startswith('/') and '..' not in parts and path not in runtime,
+            'Added file is unsafe or already in the baseline',
+        )
+        require(change.get('reason') and change.get('regression_test'), 'Added file requires rationale and regression evidence')
+        digest = change.get('sha256')
+        require(
+            isinstance(digest, str) and len(digest) == 64 and all(c in '0123456789abcdef' for c in digest),
+            'Invalid added file digest',
+        )
+        runtime[path] = digest
     expected['packaged_file_sha256'] = runtime
     require(expected == after, 'Unexpected runtime or installer contract change')
 

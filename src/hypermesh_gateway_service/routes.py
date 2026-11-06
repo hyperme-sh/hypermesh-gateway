@@ -89,7 +89,13 @@ from hypermesh_gateway_service.route_resolve import (
     ModelNotFound,
     TenantOwnedKeyPolicy,
     catalog_ids,
-    resolve_route,
+)
+from hypermesh_gateway_service.verbs import (
+    HostExcluded,
+    gate_new_work,
+    prepare_chat_payload,
+    resolve_for_caller,
+    verb_store,
 )
 from hypermesh_gateway_service.tenants import MARKETPLACE_TENANT_ID
 from hypermesh_gateway_service.tickets import TicketCache
@@ -145,6 +151,26 @@ def _quota(request: Request) -> ChatQuota:
         quota = resolve_chat_quota()
         request.app.state.chat_quota = quota
     return quota
+
+
+def _gate_router_run(request: Request, tenant_id: uuid.UUID, lease_id: uuid.UUID) -> None:
+    """Run-control gate. A paused, draining, or cancelled lease gets no new hop."""
+
+    gate_new_work(verb_store(request), tenant_id, lease_id)
+
+
+def _router_body(
+    request: Request,
+    grant: RenterGrant,
+    tenant_id: uuid.UUID,
+    body: ChatCompletionRequest,
+) -> ChatCompletionRequest:
+    """Apply caller prompt verbs. Unchanged callers keep the original body."""
+
+    prepared = prepare_chat_payload(verb_store(request), tenant_id, grant.router_subject, body)
+    if prepared is None:
+        return body
+    return ChatCompletionRequest.model_validate(prepared)
 
 
 def _require_door_capacity(request: Request, lease_id: uuid.UUID) -> None:
@@ -644,15 +670,23 @@ async def _open_door(
     purposes = IR_CHAT_PURPOSES if ir else RENTER_CHAT_PURPOSES
     requested_lease_id = _optional_lease_id(request, body)
     try:
-        lease = resolve_route(
+        lease = resolve_for_caller(
+            verb_store(request),
             _tickets(request),
             key=raw_key,
             tenant_id=tenant_id,
+            subject=grant.router_subject,
             requested_model=body.model,
             requested_lease_id=requested_lease_id,
             purposes=purposes,
             policy=_key_policy(request),
         )
+    except HostExcluded as exc:
+        raise DoorError(
+            409,
+            "This lease's host is excluded by the router.",
+            "host_excluded",
+        ) from exc
     except LeaseNotOwned as exc:
         # A lease this tenant already revoked is not ready (409 via posture).
         # A lease the cache has never held is not owned by the key.
@@ -833,6 +867,8 @@ async def _chat(request: Request, body: ChatCompletionRequest) -> StreamingRespo
         )
         raise instance_not_ready(reason) from exc
     _bind_renter_to_ticket(request, grant, claims, tenant_id, cache)
+    _gate_router_run(request, tenant_id, lease_id)
+    body = _router_body(request, grant, tenant_id, body)
     _require_door_capacity(request, lease_id)
     await _screen(
         request, body, tenant_id=tenant_id, lease_id=lease_id, subject=grant.subject, door="chat"
@@ -875,6 +911,7 @@ async def _chat(request: Request, body: ChatCompletionRequest) -> StreamingRespo
             if gated is not None:
                 return gated
     runtime = getattr(request.app.state, "runtime_client", None)
+    _gate_router_run(request, tenant_id, lease_id)
     proxied = await proxy_chat(
         lease_id=lease_id,
         payload=body.model_dump(mode="json"),
@@ -1047,6 +1084,8 @@ async def _ir_chat(request: Request, body: ChatCompletionRequest):
         )
         raise instance_not_ready(reason) from exc
     _bind_auditor_to_ticket(request, grant, claims, tenant_id, cache)
+    _gate_router_run(request, tenant_id, lease_id)
+    body = _router_body(request, grant, tenant_id, body)
     _require_door_capacity(request, lease_id)
     await _screen(
         request, body, tenant_id=tenant_id, lease_id=lease_id, subject=grant.subject, door="ir"
@@ -1091,6 +1130,7 @@ async def _ir_chat(request: Request, body: ChatCompletionRequest):
             return gated
     runtime = getattr(request.app.state, "runtime_client", None)
     try:
+        _gate_router_run(request, tenant_id, lease_id)
         proxied = await proxy_chat(
             lease_id=lease_id,
             payload=body.model_dump(mode="json"),
