@@ -131,11 +131,18 @@ The server listens on `HOST` (default `0.0.0.0`) and `PORT` (default `8000`).
 
 Before startup, securely inject `HYPERMESH_TICKET_HMAC_KEY` from the deployment secret store. It must match the control plane ticket-signing key; the gateway service credential is not a substitute. Do not generate an independent gateway key or commit/log the value. Missing verification trust prevents valid tickets from authorizing chat.
 
+Also securely inject `API_KEYS_INTERNAL_TOKEN`, matching the API-keys service internal-validation secret, and configure a reachable `HYPERMESH_API_KEYS_URL`. The operational example sets `FASTAPI_ENV=production` and forces live validation with `HYPERMESH_REQUIRE_KEY_VALIDATE=1`, so inherited development settings cannot bypass revocation checks. The ticket-verification key and gateway service credential do not replace this internal token. Missing/invalid validation credentials or an unavailable API-keys service fail closed when a live check is due.
+
 Use the gateway credential the control plane issued for this deployment, the tenant ids this gateway should watch, and a host that has `/dev/net/tun`, `CAP_NET_ADMIN`, `ip`, and `wg`.
 
 ```bash
 : "${HYPERMESH_TICKET_HMAC_KEY:?Inject the control plane ticket-verification key securely first}"
 export HYPERMESH_TICKET_HMAC_KEY
+: "${API_KEYS_INTERNAL_TOKEN:?Inject the API-keys internal-validation token securely first}"
+export API_KEYS_INTERNAL_TOKEN
+export FASTAPI_ENV=production
+export HYPERMESH_REQUIRE_KEY_VALIDATE=1
+export HYPERMESH_API_KEYS_URL=https://api-keys.example
 export HOST=0.0.0.0
 export PORT=8000
 export HYPERMESH_CONTROL_PLANE_URL=https://control-plane.example
@@ -149,7 +156,7 @@ export HYPERMESH_WG_GATEWAY_ADDR=10.77.0.1/24
 uv run python -m hypermesh_gateway_service.main
 ```
 
-Replace the URL, secret, and tenant id. `HYPERMESH_WG_APPLY` values `0`, `false`, and `no` skip `wg` and `ip`, as does a missing `/dev/net/tun`.
+Replace both service URLs, the gateway secret, and the tenant id. `HYPERMESH_WG_APPLY` values `0`, `false`, and `no` skip `wg` and `ip`, as does a missing `/dev/net/tun`.
 
 Pull the assignment by hand (the same pull the refresh loop performs):
 
@@ -176,12 +183,16 @@ curl -sS http://127.0.0.1:8000/v1/chat/completions \
   }'
 ```
 
-An API key may be sent as `X-Api-Key` instead of `Authorization`. An optional `X-Tenant-ID` must match the tenant on the credential. Outside local development the gateway rechecks API keys with the API-keys service (`HYPERMESH_API_KEYS_URL`, default `http://api-keys-service:8000`). `HYPERMESH_DEV=1` or `FASTAPI_ENV=development` skips that live check; `HYPERMESH_REQUIRE_KEY_VALIDATE=1` forces it.
+An API key may be sent as `X-Api-Key` instead of `Authorization`. An optional `X-Tenant-ID` must match the tenant on the credential. Outside local development the gateway rechecks API keys with the API-keys service (`HYPERMESH_API_KEYS_URL`, default `http://api-keys-service:8000`). Without an override, development mode and no internal token allow cached-fingerprint authorization. `HYPERMESH_REQUIRE_KEY_VALIDATE=1` forces live validation even when development settings are inherited; `=0` explicitly disables that requirement and must not be used for operational deployments. Successful validations are cached for the key TTL (default 60 seconds), so this is bounded revocation checking rather than a remote call on every request.
 
 ### Configuration
 
 | Variable | Default | Role |
 | --- | --- | --- |
+| `FASTAPI_ENV` | `development` | Set `production` for operational deployments |
+| `HYPERMESH_REQUIRE_KEY_VALIDATE` | unset | Set `1` operationally to require live API-key validation even with inherited development settings |
+| `API_KEYS_INTERNAL_TOKEN` | empty | Secret matching the API-keys internal-validation endpoint; inject securely before startup |
+| `HYPERMESH_API_KEYS_URL` | `http://api-keys-service:8000` | Reachable API-keys service base URL |
 | `HYPERMESH_CONTROL_PLANE_URL` | `http://hypermesh-service:8000` | Control plane base URL |
 | `HYPERMESH_TICKET_HMAC_KEY` | required for operational ticket verification | Secret matching the control plane ticket-signing key; inject securely before startup |
 | `HYPERMESH_GATEWAY_SERVICE_SECRET` | empty | Bearer credential for pulls and operator routes. Empty selects the stand-in plane |
