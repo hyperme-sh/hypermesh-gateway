@@ -40,6 +40,16 @@ def verify(before_path, after_path, transition_path, fixture_path):
         require(new.url == old.url.rsplit('@', 1)[0] + '@' + record['dependency_revision'], 'Target differs from qualified fixture revision')
         require(requirements.count(change['before']) == 1, 'Transition source missing or ambiguous')
         requirements[requirements.index(change['before'])] = change['after']
+    for removal in transition.get('removed_requirements', []):
+        raw = removal['before']
+        removed = Requirement(raw)
+        name = canonicalize_name(removed.name)
+        require(name not in seen and name not in records, 'Removed dependency remains installed or repeated')
+        require(removed.url and removed.url.startswith('git+https://github.com/hyperme-sh/'), 'Only explicit private dependencies can be removed')
+        require(removal.get('reason') and removal.get('regression_test'), 'Removal requires rationale and regression evidence')
+        require(requirements.count(raw) == 1, 'Removal source missing or ambiguous')
+        requirements.remove(raw)
+        seen.add(name)
     expected['requires_dist'] = sorted(requirements)
     # Consumer adaptations are explicit, byte-bound preparation evidence. They
     # neither grant stable compatibility nor allow unrecorded runtime changes.

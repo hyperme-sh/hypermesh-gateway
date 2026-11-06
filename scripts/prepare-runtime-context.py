@@ -13,6 +13,7 @@ import tomllib
 import zipfile
 
 from verify_dependency_fixtures import verify
+from check_open_boundary import runtime_violations
 
 
 def main():
@@ -37,6 +38,8 @@ def main():
          'scripts', 'tests_artifacts'], cwd=root, text=True)
     if changed:
         raise SystemExit('Runtime inputs include changes outside the selected source commit')
+    if runtime_violations(root):
+        raise SystemExit('Provider dependency in production runtime graph')
     dependencies = verify(root)
     wheel, = args.artifacts.glob('*.whl')
     subprocess.run(['python3', str(root/'scripts/verify_wheel.py'), str(args.artifacts)], check=True)

@@ -180,7 +180,7 @@ async def test_verb_auth_matches_the_chat_door(
     )
     assert header.status_code == 200, header.text
     assert header.json()["run"] == "paused"
-    from api.infrastructure.security.api_key_exchange_jwt import mint_api_key_session_jwt
+    from controlplane_identity.security.api_key_exchange_jwt import mint_api_key_session_jwt
 
     token = mint_api_key_session_jwt(
         key_record_id=uuid.uuid4(), tenant_id=tenant_id, scopes=[]

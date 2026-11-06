@@ -1140,7 +1140,7 @@ async def test_chat_portal_jwt_local_verify_plus_ticket(
 async def test_chat_exchange_jwt_plus_ticket_does_not_hit_control_plane(
     http_client, tenant_headers, control_plane, app, tenant_id
 ):
-    from api.infrastructure.security.api_key_exchange_jwt import mint_api_key_session_jwt
+    from controlplane_identity.security.api_key_exchange_jwt import mint_api_key_session_jwt
 
     lease_id = uuid.uuid4()
     app.state.ticket_cache.put(tenant_id, _signed_ticket(lease_id))

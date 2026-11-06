@@ -2,6 +2,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 unset PYTHONPATH UV_NO_SYNC
+python3 scripts/check_open_boundary.py src pyproject.toml --runtime-project .
 sync_options=()
 run_options=()
 export_options=()
