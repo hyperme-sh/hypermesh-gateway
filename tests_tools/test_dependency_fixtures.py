@@ -63,11 +63,11 @@ def test_tampered_transitive_pin_rejected_even_with_updated_fixture_digest(root)
     import zipfile
     p = root/'tests_artifacts/dependencies/manifest.json'
     manifest = json.loads(p.read_text())
-    record = next(r for r in manifest['dependencies'] if r['distribution']=='controlplane-core')
+    record = next(r for r in manifest['dependencies'] if r['distribution']=='controlplane-api')
     wheel = p.parent/record['wheel']
     with zipfile.ZipFile(wheel) as z: files = {n:z.read(n) for n in z.namelist()}
     metadata, = [n for n in files if n.endswith('.dist-info/METADATA')]
-    api = next(r for r in manifest['dependencies'] if r['distribution']=='controlplane-api')
+    api = next(r for r in manifest['dependencies'] if r['distribution']=='controlplane-identity')
     files[metadata] = files[metadata].replace(api['dependency_revision'].encode(), b'a'*40)
     with zipfile.ZipFile(wheel,'w') as z:
         for n,b in files.items(): z.writestr(n,b)

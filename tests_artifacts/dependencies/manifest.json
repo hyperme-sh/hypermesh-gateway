@@ -72,34 +72,6 @@
       "build_command": "uv build --wheel <exact clean pinned git archive>"
     },
     {
-      "distribution": "operator-ban-store",
-      "version": "0.1.0",
-      "dependency_revision": "4bac0ba16e029df058498b1926d57c10b9d66e16",
-      "artifact_revision": "4bac0ba16e029df058498b1926d57c10b9d66e16",
-      "wheel": "operator_ban_store-0.1.0-py3-none-any.whl",
-      "sha256": "f02a682f0ddd6591cc58ef8e23d32ef9c80e83772d5d144ee0fcd6f06d0d2928",
-      "source_url": "https://github.com/hyperme-sh/user-service/tree/4bac0ba16e029df058498b1926d57c10b9d66e16",
-      "delivery": "local_build_from_exact_clean_git_revision",
-      "qualification": "Exact-source development fixture; no prior release required and no publication claimed",
-      "source_archive_sha256": "fd306dd224cffdb1ea06b97b478b5f6befc5fbb56aeb1b0e7647711e1ae24b29",
-      "source_tree": "e7eb60001dbf0ede40eb487fc8c3f6275c88cb65",
-      "build_command": "uv build --wheel <exact clean pinned git archive>"
-    },
-    {
-      "distribution": "controlplane-core",
-      "version": "0.1.0",
-      "dependency_revision": "c46bf282a8f1a605cfb8acb9beafb474c0b1b0c8",
-      "artifact_revision": "c46bf282a8f1a605cfb8acb9beafb474c0b1b0c8",
-      "wheel": "controlplane_core-0.1.0-py3-none-any.whl",
-      "sha256": "7432af7dbbc16ddb0b86e0e74c25caf6d7da16e2a3622d819c4a36f009185189",
-      "source_url": "https://github.com/hyperme-sh/controlplane-core/tree/c46bf282a8f1a605cfb8acb9beafb474c0b1b0c8",
-      "delivery": "local_build_from_exact_clean_git_revision",
-      "qualification": "Exact-source development fixture; no prior release required and no publication claimed",
-      "source_archive_sha256": "24dbc5d1e93171afff50196afb69dcb2a32f675f9d95b4343d0efd4f0d50ee60",
-      "source_tree": "d5fcfbeee33a3fb9e278fc3dc71113e541b6672f",
-      "build_command": "uv build --wheel <exact clean pinned git archive>"
-    },
-    {
       "distribution": "hypermesh-ticket",
       "version": "0.1.0",
       "dependency_revision": "9e5aaf2060b1a8ac56db535ee3b979ce29c44e2e",

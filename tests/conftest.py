@@ -4,7 +4,7 @@ import uuid
 
 import pytest
 
-from api.core import config as api_config
+from controlplane_api import config as api_config
 
 from hypermesh_gateway_service.app import create_app
 from hypermesh_gateway_service.control_plane import FakeControlPlane, GatewayTunnel, LeaseView

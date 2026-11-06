@@ -8,10 +8,6 @@
       "after": "controlplane-api @ git+https://github.com/hyperme-sh/controlplane-api.git@82fc8c2ca21531f1a3f7a695257b3465c4a347da"
     },
     {
-      "before": "controlplane-core @ git+https://github.com/hyperme-sh/controlplane-core.git@8f66f5681b28e60a619344779252a5a048d39486",
-      "after": "controlplane-core @ git+https://github.com/hyperme-sh/controlplane-core.git@c46bf282a8f1a605cfb8acb9beafb474c0b1b0c8"
-    },
-    {
       "before": "controlplane-db @ git+https://github.com/hyperme-sh/controlplane-db.git@9cfad090c48e28bc33d1a96369e7e856c203a2bf",
       "after": "controlplane-db @ git+https://github.com/hyperme-sh/controlplane-db.git@95ef61433374274f4a4fc287e15982be6357e1cc"
     },
@@ -39,8 +35,6 @@
     "controlplane-identity": "0.15.0",
     "controlplane-db": "0.1.0",
     "controlplane-events": "0.1.0",
-    "operator-ban-store": "0.1.0",
-    "controlplane-core": "0.1.0",
     "hypermesh-ticket": "0.1.0"
   },
   "consumer_adaptations": {
@@ -75,5 +69,12 @@
       "reason": "Process-local router prompt verbs. Unwired verbs return wired false and change nothing. Each caller can exclude at most 32 hosts.",
       "regression_test": "tests/test_router_verbs.py"
     }
-  }
+  },
+  "removed_requirements": [
+    {
+      "before": "controlplane-core @ git+https://github.com/hyperme-sh/controlplane-core.git@8f66f5681b28e60a619344779252a5a048d39486",
+      "reason": "Gateway imports no legacy core; removing it excludes the transitive provider implementation.",
+      "regression_test": "tests_tools/test_open_boundary.py"
+    }
+  ]
 }

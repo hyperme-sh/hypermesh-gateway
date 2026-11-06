@@ -13,7 +13,7 @@ import pytest
 from jwt import InvalidTokenError
 from starlette.requests import Request
 
-from api.infrastructure.security.api_key_exchange_jwt import mint_api_key_session_jwt
+from controlplane_identity.security.api_key_exchange_jwt import mint_api_key_session_jwt
 from hypermesh_gateway_service.renter_auth import (
     AUDITOR_GRANT_REQUIRED,
     RENTER_AUTH_REQUIRED,
@@ -113,7 +113,7 @@ def test_verify_jwt_locally_honors_exchange_jwt(tenant_id):
 
 
 def test_verify_jwt_locally_uses_cached_jwks_not_token_endpoint(monkeypatch):
-    from api.core import config
+    from controlplane_api import config
 
     monkeypatch.setattr(config.settings, "keycloak_jwks_url", "http://jwks.example/certs")
     monkeypatch.setattr(config.settings, "keycloak_issuer", "http://kc.example/realms/controlplane")
@@ -127,7 +127,7 @@ def test_verify_jwt_locally_uses_cached_jwks_not_token_endpoint(monkeypatch):
             return self.validate_sync(token)
 
     monkeypatch.setattr(
-        "api.infrastructure.security.keycloak_jwt.get_keycloak_jwt_validator",
+        "controlplane_identity.security.keycloak_jwt.get_keycloak_jwt_validator",
         lambda: FakeValidator(),
     )
     claims = verify_jwt_locally("portal.jwt.token")
@@ -136,7 +136,7 @@ def test_verify_jwt_locally_uses_cached_jwks_not_token_endpoint(monkeypatch):
 
 
 def test_verify_jwt_locally_jwks_failure_is_none(monkeypatch):
-    from api.core import config
+    from controlplane_api import config
 
     monkeypatch.setattr(config.settings, "keycloak_jwks_url", "http://jwks.example/certs")
     monkeypatch.setattr(config.settings, "keycloak_issuer", "http://kc.example/realms/controlplane")
@@ -149,7 +149,7 @@ def test_verify_jwt_locally_jwks_failure_is_none(monkeypatch):
             return self.validate_sync(token)
 
     monkeypatch.setattr(
-        "api.infrastructure.security.keycloak_jwt.get_keycloak_jwt_validator",
+        "controlplane_identity.security.keycloak_jwt.get_keycloak_jwt_validator",
         lambda: FakeValidator(),
     )
     assert verify_jwt_locally("portal.jwt.token") is None
