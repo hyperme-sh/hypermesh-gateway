@@ -52,7 +52,7 @@ jobs:
   publish:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: package
-    runs-on: ubuntu-24.04
+    runs-on: ${{ github.event.repository.private && fromJSON('["self-hosted", "linux", "x64", "debrunner"]') || 'ubuntu-24.04' }}
     permissions:
       actions: read
       packages: write
@@ -79,7 +79,7 @@ jobs:
   remove-transfer:
     needs: [package, evidence]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-24.04
+    runs-on: ${{ github.event.repository.private && fromJSON('["self-hosted", "linux", "x64", "debrunner"]') || 'ubuntu-24.04' }}
     permissions:
       actions: write
     steps:
