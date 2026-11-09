@@ -30,6 +30,8 @@ concurrency:
 
 jobs:
   smoke:
+    outputs:
+      receipt: ${{ steps.receipt.outputs.json }}
     name: revision pin or manifest
     if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
     runs-on: ${{ github.event.repository.private && fromJSON('["self-hosted", "linux", "x64", "debrunner"]') || 'ubuntu-24.04' }}
@@ -50,10 +52,23 @@ jobs:
           mkdir -p "$EVIDENCE_DIR"
           python3 scripts/gateway_post_deploy_smoke.py --evidence-dir "$EVIDENCE_DIR"
 
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      - name: Collect the credential-free JSON receipt
+        id: receipt
         if: always()
+        run: |
+          if [[ -s "$GITHUB_WORKSPACE/hypermesh-smoke-evidence/gateway-rollout.json" ]]; then
+            json=$(jq -ce 'select(type == "object")' "$GITHUB_WORKSPACE/hypermesh-smoke-evidence/gateway-rollout.json")
+            echo "json=$json" >> "$GITHUB_OUTPUT"
+          fi
+
+  publish-receipt:
+    needs: smoke
+    if: always() && github.ref == 'refs/heads/main' && needs.smoke.outputs.receipt != ''
+    permissions:
+      packages: write
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: hyperme-sh/.github/actions/publish-ci-receipt@f8fdd80f8ef3a6a2a9755a34baa07b702e1ec39c
         with:
-          name: hypermesh-gateway-smoke-evidence
-          path: hypermesh-smoke-evidence/
-          if-no-files-found: warn
-          retention-days: 14
+          name: gateway-rollout
+          receipt: ${{ needs.smoke.outputs.receipt }}
