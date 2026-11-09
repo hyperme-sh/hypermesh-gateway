@@ -5,6 +5,7 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+  packages: write
 jobs:
   package:
     if: github.ref == 'refs/heads/main'
@@ -33,15 +34,28 @@ jobs:
           echo "RUNTIME_IMAGE_OUTPUT_DIR=$output" >> "$GITHUB_ENV"
           export RUNTIME_IMAGE_OUTPUT_DIR="$output"
           bash scripts/check-runtime-image.sh
-      - name: Retain the exact tested runtime image
+      - name: Publish qualified runtime to GHCR
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: tested-runtime-image
-          path: ${{ env.RUNTIME_IMAGE_OUTPUT_DIR }}/*
-          if-no-files-found: error
-          retention-days: 3
-          compression-level: 0
+        env:
+          REGISTRY_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          export DOCKER_CONFIG=$(mktemp -d "$RUNNER_TEMP/ghcr.XXXXXX")
+          source="$(cat "$RUNTIME_IMAGE_OUTPUT_DIR/image.ref")"
+          target="ghcr.io/${GITHUB_REPOSITORY,,}/runtime:sha-$GITHUB_SHA"
+          trap 'docker image rm "$target" >/dev/null 2>&1 || true; docker image rm "$source" >/dev/null 2>&1 || true; rm -rf "$DOCKER_CONFIG" "$RUNTIME_IMAGE_OUTPUT_DIR"' EXIT
+          printf '%s' "$REGISTRY_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+          docker load -i "$RUNTIME_IMAGE_OUTPUT_DIR/image.tar"
+          docker tag "$source" "$target"
+          docker push "$target"
+          digest=$(docker buildx imagetools inspect "$target" --format '{{.Manifest.Digest}}')
+          [[ $digest =~ ^sha256:[0-9a-f]{64}$ ]]
+          expected=$(docker image inspect "$source" --format '{{.Id}}')
+          repo=${target%:*}
+          docker pull "$repo@$digest"
+          test "$(docker image inspect "$repo@$digest" --format '{{.Id}}')" = "$expected"
+          printf 'Qualified image: `%s@%s` (source `%s`)\n' "$repo" "$digest" "$GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
       - name: Retain validated package bytes
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
