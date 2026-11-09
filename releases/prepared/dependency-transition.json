@@ -58,9 +58,15 @@
     },
     "hypermesh_gateway_service/routes.py": {
       "before_sha256": "0c74b3e5ecd3cefe31a6475cecddf43bdcf571f932879b9d0c8be7b294ef5c92",
-      "after_sha256": "cf411c26e2094db7327377dff19b9f88a1ea79f6b777d1bd0619b32d862535bf",
-      "reason": "Apply router run control, routing, and prompt text on the existing chat doors before the host hop.",
-      "regression_test": "tests/test_router_verbs.py"
+      "after_sha256": "22ecd3c6dd97c2fe39c23c75aef37fe66be1f70fae3a0125402bf1bb944c9584",
+      "reason": "Apply router run control, routing, and prompt text on the existing chat doors before the host hop. Count successful peer applications in the tunnel apply response.",
+      "regression_test": "tests/test_router_verbs.py; tests/test_hypermesh_gateway.py::test_tunnels_apply_uses_same_allocated_apply_path"
+    },
+    "hypermesh_gateway_service/wg.py": {
+      "before_sha256": "4b88a9dca504b011643c396bbdb5117e7224cebae87bb9b9209ff533c1221d0c",
+      "after_sha256": "2ad74a3501cd023f11542277c9566573525ea7c1997883ec385e66472ded7510",
+      "reason": "Report skipped and failed WireGuard apply attempts to the caller.",
+      "regression_test": "tests/test_wg_apply.py::test_skipped_or_failed_apply_is_not_reported_as_applied"
     }
   },
   "added_files": {
