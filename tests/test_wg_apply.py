@@ -73,3 +73,16 @@ def test_second_host_peer_applies_on_an_existing_iface(monkeypatch) -> None:
 
     assert ["wg", "set", wg.WG_IFACE, "peer", "pub-b", "allowed-ips", "10.77.0.3/32"] in calls
     assert wg._applied_host_peers == {"pub-a", "pub-b"}
+
+def test_skipped_or_failed_apply_is_not_reported_as_applied(monkeypatch) -> None:
+    args = dict(server_private_key="priv", peer_public_key="unapplied", client_address="10.77.0.2/32")
+    monkeypatch.setattr(wg, "should_apply", lambda: False)
+    assert wg.apply_gateway(**args) is False
+
+    def fail(cmd):
+        raise subprocess.CalledProcessError(1, cmd)
+
+    monkeypatch.setattr(wg, "should_apply", lambda: True)
+    monkeypatch.setattr(wg, "_run", fail)
+    assert wg.apply_gateway(**args) is False
+    assert "unapplied" not in wg._applied_host_peers

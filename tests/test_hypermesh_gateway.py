@@ -942,7 +942,7 @@ async def test_tunnels_apply_uses_same_allocated_apply_path(
     applied: list[dict[str, str]] = []
     monkeypatch.setattr(
         "hypermesh_gateway_service.routes.apply_gateway",
-        lambda **kwargs: applied.append(kwargs),
+        lambda **kwargs: applied.append(kwargs) is None,
     )
     lease_id = uuid.uuid4()
     control_plane.tunnels.append(_allocated_tunnel(lease_id))
