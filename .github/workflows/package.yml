@@ -68,13 +68,41 @@ jobs:
     name: Qualified OCI ${{ needs.publish.outputs.digest }}
     needs: publish
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    permissions: {}
+    concurrency:
+      group: qualified-test-channel
+      cancel-in-progress: false
+      queue: max
+    permissions:
+      contents: read
+      packages: write
     runs-on: ${{ github.event.repository.private && fromJSON('["self-hosted", "linux", "x64", "debrunner"]') || 'ubuntu-24.04' }}
     steps:
       - name: Verify qualified manifest identity
         env:
           DIGEST: ${{ needs.publish.outputs.digest }}
         run: '[[ "$DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]'
+
+      - name: Publish the qualified manifest on the moving TEST channel
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DIGEST: ${{ needs.publish.outputs.digest }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+          current=$(gh api "repos/$GITHUB_REPOSITORY/commits/$DEFAULT_BRANCH" --jq .sha)
+          if [[ "$GITHUB_SHA" != "$current" ]]; then
+            echo "Superseded by $current" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          repo="ghcr.io/${GITHUB_REPOSITORY,,}/runtime"
+          export DOCKER_CONFIG=$(mktemp -d "$RUNNER_TEMP/test-channel.XXXXXX")
+          trap 'rm -rf -- "$DOCKER_CONFIG"' EXIT
+          printf '%s' "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          docker buildx imagetools create --prefer-index=false --tag "$repo:test" "$repo@$DIGEST"
+          actual=$(docker buildx imagetools inspect "$repo:test" --format '{{.Manifest.Digest}}')
+          test "$actual" = "$DIGEST"
+          echo "$repo:test -> $actual ($GITHUB_SHA)" >> "$GITHUB_STEP_SUMMARY"
 
   remove-transfer:
     needs: [package, evidence]
