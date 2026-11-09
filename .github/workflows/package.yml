@@ -102,6 +102,9 @@ jobs:
           docker buildx imagetools create --prefer-index=false --tag "$repo:test" "$repo@$DIGEST"
           actual=$(docker buildx imagetools inspect "$repo:test" --format '{{.Manifest.Digest}}')
           test "$actual" = "$DIGEST"
+          docker pull --quiet --platform linux/amd64 "$repo@$actual"
+          revision=$(docker image inspect --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}' "$repo@$actual")
+          test "$revision" = "$GITHUB_SHA"
           echo "$repo:test -> $actual ($GITHUB_SHA)" >> "$GITHUB_STEP_SUMMARY"
 
   remove-transfer:
