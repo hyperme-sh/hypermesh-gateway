@@ -27,7 +27,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Publish exact tested stable artifacts
-        uses: hyperme-sh/.github/actions/release-channel@610bff6e70ae3b03e53b427476befa4ddaa4d1c4
+        uses: hyperme-sh/.github/actions/release-channel@91e356a9fbd5d8a42297053445b90ab9c5fa30c1
         with:
           package-source: ghcr
           workflow: .github/workflows/package.yml
