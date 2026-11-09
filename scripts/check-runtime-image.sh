@@ -5,7 +5,9 @@ cd "$(dirname "$0")/.."
 scratch=$(mktemp -d)
 image="hypermesh-gateway:qualification-${GITHUB_RUN_ID:-local}-${GITHUB_RUN_ATTEMPT:-1}-${BASHPID}"
 probe=''
+server=''
 cleanup() {
+  if [[ -n "$server" ]]; then docker rm -f "$server" >/dev/null 2>&1 || true; fi
   if [[ -n "$probe" ]]; then rm -f "$probe"; fi
   docker image rm "$image" >/dev/null 2>&1 || true
   rm -rf "$scratch"
@@ -40,9 +42,27 @@ assert importlib.util.find_spec("hypermesh_service") is None
 assert importlib.util.find_spec("controlplane_billing") is None
 import hypermesh_ticket
 assert "/site-packages/" in hypermesh_ticket.__file__
+from hypermesh_gateway_service.main import main
+assert callable(main)
 from hypermesh_gateway_service.app import create_app
 assert create_app().openapi()["paths"]
 print(json.dumps({"installed_gateway": True, "wireguard_tools_available": True}))'
+# Exercise the shipped CMD; importing the ASGI application skips its server.
+server=$(docker run -d --network none --cap-drop ALL --read-only --tmpfs /tmp \
+  -e HYPERMESH_WG_APPLY=0 -e HYPERMESH_ASSIGNMENT_REFRESH_S=0 "$image")
+docker exec "$server" /app/.venv/bin/python -I -c '
+import json, time, urllib.request
+for attempt in range(30):
+    try:
+        with urllib.request.urlopen("http://127.0.0.1:8000/openapi.json", timeout=2) as response:
+            assert json.load(response)["paths"]
+        break
+    except OSError:
+        if attempt == 29:
+            raise
+        time.sleep(1)'
+docker rm -f "$server" >/dev/null
+server=''
 status=0
 docker run --rm --network none --cap-drop ALL --read-only --env PATH=/app/.venv/bin \
   "$image" >"$scratch/missing.out" 2>&1 || status=$?
