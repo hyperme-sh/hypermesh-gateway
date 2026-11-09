@@ -21,12 +21,14 @@ jobs:
     permissions:
       contents: write
       actions: read
+      packages: read
     if: github.event_name == 'push' && needs.release-admission.result == 'success'
     runs-on: ${{ github.event.repository.private && fromJSON('["self-hosted", "linux", "x64", "debrunner"]') || 'ubuntu-24.04' }}
     timeout-minutes: 15
     steps:
       - name: Publish exact tested stable artifacts
-        uses: hyperme-sh/.github/actions/release-channel@c16044a6d987d7d912d70bcd09ea731ab2b91b9e
+        uses: hyperme-sh/.github/actions/release-channel@610bff6e70ae3b03e53b427476befa4ddaa4d1c4
         with:
+          package-source: ghcr
           workflow: .github/workflows/package.yml
           token: ${{ github.token }}

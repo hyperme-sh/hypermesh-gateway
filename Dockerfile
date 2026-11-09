@@ -17,6 +17,7 @@ RUN apt-get update \
 WORKDIR /app
 COPY --from=builder /app/.venv /app/.venv
 COPY docker-entrypoint.sh /docker-entrypoint.sh
+COPY tested-dist.zip /qualified/tested-dist.zip
 COPY runtime-inputs.json /app/runtime-inputs.json
 ARG SOURCE_SHA
 ARG BUILT_AT

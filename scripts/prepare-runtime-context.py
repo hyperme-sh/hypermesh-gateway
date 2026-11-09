@@ -55,6 +55,11 @@ def main():
                 != sorted(map(normalize, project['dependencies']))):
         raise SystemExit('Owner wheel metadata differs from the selected source')
     args.output.mkdir(parents=True, exist_ok=False)
+    with zipfile.ZipFile(args.output/'tested-dist.zip', 'w') as packages:
+        for path in sorted(args.artifacts.iterdir()):
+            if not path.is_file() or path.is_symlink():
+                raise ValueError("Expected flat release package files")
+            packages.write(path, path.name)
     wheels = args.output/'wheels'
     wheels.mkdir()
     inputs = {}
