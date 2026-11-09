@@ -48,16 +48,16 @@ def apply_gateway(
     peer_public_key: str,
     client_address: str,
     listen_port: int = WG_LISTEN_PORT,
-) -> None:
+) -> bool:
     if not should_apply():
         logger.info("wireguard apply skipped (no tun or HYPERMESH_WG_APPLY=0)")
-        return
+        return False
     if not server_private_key or not peer_public_key:
         logger.info("wireguard apply skipped (missing keys)")
-        return
+        return False
     if peer_public_key in _applied_host_peers:
         logger.info("wireguard host peer already applied")
-        return
+        return True
     peer_ip = client_address.split("/", 1)[0]
     with tempfile.NamedTemporaryFile("w", delete=False) as handle:
         handle.write(server_private_key + "\n")
@@ -80,6 +80,7 @@ def apply_gateway(
         _run(["ip", "link", "set", WG_IFACE, "up"])
         _applied_host_peers.add(peer_public_key)
         logger.info("wireguard gateway applied on %s", WG_IFACE)
+        return True
     except FileNotFoundError:
         logger.warning("wireguard tools not installed; gateway apply skipped")
     except subprocess.CalledProcessError as exc:
@@ -89,6 +90,7 @@ def apply_gateway(
             os.unlink(key_path)
         except OSError:
             pass
+    return False
 
 
 def _ensure_iface(listen_port: int, key_path: str) -> None:

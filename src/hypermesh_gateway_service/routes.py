@@ -340,12 +340,12 @@ def apply_allocated_tunnels(tunnels: list[GatewayTunnel]) -> int:
         ):
             continue
         seen.add(key)
-        apply_gateway(
+        if apply_gateway(
             server_private_key=tunnel.server_private_key,
             peer_public_key=key,
             client_address=tunnel.client_address,
-        )
-        applied += 1
+        ):
+            applied += 1
     return applied
 
 
