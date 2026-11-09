@@ -5,13 +5,13 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
-  packages: write
 jobs:
   package:
     if: github.ref == 'refs/heads/main'
     runs-on: ${{ github.event.repository.private && fromJSON('["self-hosted", "linux", "x64", "debrunner"]') || 'ubuntu-24.04' }}
     outputs:
-      digest: ${{ steps.registry.outputs.digest }}
+      archive-sha256: ${{ steps.archive.outputs.sha256 }}
+      artifact-id: ${{ steps.handoff.outputs.artifact-id }}
     timeout-minutes: 30
     steps:
       - name: Prepare release output
@@ -36,38 +36,42 @@ jobs:
           echo "RUNTIME_IMAGE_OUTPUT_DIR=$output" >> "$GITHUB_ENV"
           export RUNTIME_IMAGE_OUTPUT_DIR="$output"
           bash scripts/check-runtime-image.sh
-      - name: Publish qualified runtime to GHCR
-        id: registry
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        env:
-          REGISTRY_TOKEN: ${{ github.token }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          export DOCKER_CONFIG=$(mktemp -d "$RUNNER_TEMP/ghcr.XXXXXX")
-          source="$(cat "$RUNTIME_IMAGE_OUTPUT_DIR/image.ref")"
-          target="ghcr.io/${GITHUB_REPOSITORY,,}/runtime:sha-$GITHUB_SHA"
-          trap 'docker image rm "$target" >/dev/null 2>&1 || true; docker image rm "$source" >/dev/null 2>&1 || true; rm -rf "$DOCKER_CONFIG" "$RUNTIME_IMAGE_OUTPUT_DIR"' EXIT
-          printf '%s' "$REGISTRY_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
-          docker load -i "$RUNTIME_IMAGE_OUTPUT_DIR/image.tar"
-          docker tag "$source" "$target"
-          docker push "$target"
-          digest=$(docker buildx imagetools inspect "$target" --format '{{.Manifest.Digest}}')
-          [[ $digest =~ ^sha256:[0-9a-f]{64}$ ]]
-          expected=$(docker image inspect "$source" --format '{{.Id}}')
-          repo=${target%:*}
-          docker pull "$repo@$digest"
-          test "$(docker image inspect "$repo@$digest" --format '{{.Id}}')" = "$expected"
-          printf 'Qualified image: `%s@%s` (source `%s`)\n' "$repo" "$digest" "$GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
-          echo "digest=$digest" >> "$GITHUB_OUTPUT"
-  evidence:
-    name: Qualified OCI ${{ needs.package.outputs.digest }}
+      - name: Bind the qualified archive to the build
+        id: archive
+        run: echo "sha256=$(sha256sum "$RUNTIME_IMAGE_OUTPUT_DIR/image.tar" | cut -d ' ' -f1)" >> "$GITHUB_OUTPUT"
+      - name: Hand the qualified image to the isolated publisher
+        id: handoff
+        if: github.event_name == 'push'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: gateway-publisher-input-${{ github.run_attempt }}
+          path: ${{ env.RUNTIME_IMAGE_OUTPUT_DIR }}/image.tar
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 1
+  publish:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: package
+    runs-on: ubuntu-24.04
+    permissions:
+      actions: read
+      packages: write
+    outputs:
+      digest: ${{ steps.registry.outputs.digest }}
+    steps:
+      - id: registry
+        uses: hyperme-sh/.github/actions/publish-gateway-runtime@26e1242e2f03803db7aa77a468f390d197c5bc6b
+        with:
+          artifact-id: ${{ needs.package.outputs.artifact-id }}
+          archive-sha256: ${{ needs.package.outputs.archive-sha256 }}
+  evidence:
+    name: Qualified OCI ${{ needs.publish.outputs.digest }}
+    needs: publish
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions: {}
     runs-on: ${{ github.event.repository.private && fromJSON('["self-hosted", "linux", "x64", "debrunner"]') || 'ubuntu-24.04' }}
     steps:
       - name: Verify qualified manifest identity
         env:
-          DIGEST: ${{ needs.package.outputs.digest }}
+          DIGEST: ${{ needs.publish.outputs.digest }}
         run: '[[ "$DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]'
