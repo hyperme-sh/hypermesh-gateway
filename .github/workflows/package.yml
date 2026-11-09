@@ -11,7 +11,7 @@ jobs:
     runs-on: ${{ github.event.repository.private && fromJSON('["self-hosted", "linux", "x64", "debrunner"]') || 'ubuntu-24.04' }}
     outputs:
       archive-sha256: ${{ steps.archive.outputs.sha256 }}
-      artifact-id: ${{ steps.handoff.outputs.artifact-id }}
+      cache-key: ${{ steps.archive.outputs.cache-key }}
     timeout-minutes: 30
     steps:
       - name: Prepare release output
@@ -38,17 +38,17 @@ jobs:
           bash scripts/check-runtime-image.sh
       - name: Bind the qualified archive to the build
         id: archive
-        run: echo "sha256=$(sha256sum "$RUNTIME_IMAGE_OUTPUT_DIR/image.tar" | cut -d ' ' -f1)" >> "$GITHUB_OUTPUT"
-      - name: Hand the qualified image to the isolated publisher
-        id: handoff
+        run: |
+          mkdir -p .gateway-transfer
+          mv "$RUNTIME_IMAGE_OUTPUT_DIR/image.tar" .gateway-transfer/image.tar
+          echo "sha256=$(sha256sum .gateway-transfer/image.tar | cut -d ' ' -f1)" >> "$GITHUB_OUTPUT"
+          echo "cache-key=gateway-transfer-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" >> "$GITHUB_OUTPUT"
+      - name: Transfer verified bytes to the isolated publisher
         if: github.event_name == 'push'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
         with:
-          name: gateway-publisher-input-${{ github.run_attempt }}
-          path: ${{ env.RUNTIME_IMAGE_OUTPUT_DIR }}/image.tar
-          if-no-files-found: error
-          compression-level: 0
-          retention-days: 1
+          key: ${{ steps.archive.outputs.cache-key }}
+          path: .gateway-transfer/image.tar
   publish:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: package
@@ -60,9 +60,9 @@ jobs:
       digest: ${{ steps.registry.outputs.digest }}
     steps:
       - id: registry
-        uses: hyperme-sh/.github/actions/publish-gateway-runtime@26e1242e2f03803db7aa77a468f390d197c5bc6b
+        uses: hyperme-sh/.github/actions/publish-gateway-runtime@2a17fd00ae67ecb340e59918ee45c8c409048bbc
         with:
-          artifact-id: ${{ needs.package.outputs.artifact-id }}
+          cache-key: ${{ needs.package.outputs.cache-key }}
           archive-sha256: ${{ needs.package.outputs.archive-sha256 }}
   evidence:
     name: Qualified OCI ${{ needs.publish.outputs.digest }}
