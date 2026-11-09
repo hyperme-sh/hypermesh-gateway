@@ -21,6 +21,7 @@ dependencies = [
 ]
 
 [dependency-groups]
+image = ["uvicorn==0.54.0"]
 dev = [
     "asgi-lifespan>=2.1.0",
     "httpx>=0.28.0",

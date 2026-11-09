@@ -70,7 +70,7 @@ def main():
         if package['source'].get('git'):
             options.extend(['--no-emit-package', package['name']])
     requirements = args.output/'requirements.txt'
-    subprocess.run(['uv', 'export', '--frozen', '--no-dev', '--no-emit-project',
+    subprocess.run(['uv', 'export', '--frozen', '--no-dev', '--group', 'image', '--no-emit-project',
                     *options, '--format', 'requirements-txt', '--output-file', str(requirements)],
                    cwd=root, check=True, stdout=subprocess.DEVNULL)
     if 'git+' in requirements.read_text():
