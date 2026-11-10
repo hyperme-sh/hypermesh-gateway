@@ -88,7 +88,7 @@ async def purge_closed_history(tenant, subject):
     from controlplane_tenancy.account_profile import _closure_retention
     async with transaction("HYPERMESH_HISTORY_DATABASE_URL", tenant, subject, "saved-history-account") as (db, args):
         receipt = (await db.execute(text("""SELECT purged_at,closed_at IS NOT NULL AND
-            closed_at <= now()-:period AND NOT enabled AS due FROM public.hypermesh_history_preferences
+            closed_at <= now()-CAST(:period AS interval) AND NOT enabled AS due FROM public.hypermesh_history_preferences
             WHERE tenant_id=:tenant AND subject=:subject FOR UPDATE"""), {**args, "period": _closure_retention()})).first()
         if not receipt or not receipt.due:
             raise ValueError("Original closed history preference must be due for purge")
