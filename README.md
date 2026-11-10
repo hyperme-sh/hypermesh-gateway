@@ -269,3 +269,17 @@ The package version is **0.1.0** (`pyproject.toml`). The release line in `releas
 ## License
 
 Apache License 2.0. See [LICENSE](LICENSE).
+
+### Retained privacy data
+
+An authenticated renter can withdraw via `PUT /v1/account/training-consent`
+with `{"enabled":false}`, then delete their submissions via
+`DELETE /v1/account/training-submissions`. Both operations use the verified
+account subject and tenant. Configure the training role through
+`HYPERMESH_TRAINING_DATABASE_URL`. The gateway does not start collection.
+
+For saved-history retention, run
+`python -m hypermesh_gateway_service.retained_privacy --tenant UUID --subject SUBJECT`
+with the separate `HYPERMESH_HISTORY_DATABASE_URL` role. This operator entry
+checks the original closure receipt and retention interval before deleting
+entries and recording the purge. Reruns preserve the original purge timestamp.
