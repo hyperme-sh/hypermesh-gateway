@@ -867,6 +867,7 @@ async def _chat(request: Request, body: ChatCompletionRequest) -> StreamingRespo
     grant, tenant_id, lease_id = await _open_door(request, body, ir=False)
     cache = _tickets(request)
     cached = cache.get(tenant_id, lease_id)
+    organization_id = cached.renter_organization_id if cached else None
     peer_key = cached.peer_public_key if cached else None
     peer_up = _peer_is_up(request, peer_key)
     try:
@@ -908,6 +909,7 @@ async def _chat(request: Request, body: ChatCompletionRequest) -> StreamingRespo
         if decision == "deny":
             return _policy_deny(
                 request,
+                organization_id=organization_id,
                 tenant_id=tenant_id,
                 lease_id=lease_id,
                 who=grant.subject,
@@ -917,6 +919,7 @@ async def _chat(request: Request, body: ChatCompletionRequest) -> StreamingRespo
         if decision == "hold":
             gated = await _hold_or_resume(
                 request,
+                organization_id=organization_id,
                 tenant_id=tenant_id,
                 lease_id=lease_id,
                 who=grant.subject,
@@ -979,11 +982,6 @@ async def _load_policies(
         return []
 
 
-def _receipt_organization(request,tenant_id,lease_id):
-    ticket=_tickets(request).get(tenant_id,lease_id)
-    return ticket.renter_organization_id if ticket else None
-
-
 def _policy_deny(
     request: Request,
     *,
@@ -992,9 +990,10 @@ def _policy_deny(
     who: str,
     prompt_class: str,
     why: str,
+    organization_id: uuid.UUID | None = None,
 ) -> JSONResponse:
     receipt = _receipts(request).record(
-        organization_id=_receipt_organization(request,tenant_id,lease_id),
+        organization_id=organization_id,
         tenant_id=tenant_id,
         lease_id=lease_id,
         who=who,
@@ -1018,6 +1017,7 @@ async def _hold_or_resume(
     prompt_class: str,
     purpose: str,
     why: str,
+    organization_id: uuid.UUID | None = None,
 ) -> dict[str, object] | JSONResponse | None:
     """Hold/deny from the inbox. None means resume (proxy)."""
 
@@ -1043,7 +1043,7 @@ async def _hold_or_resume(
         return None
     if outcome == "deny":
         receipt = store.record(
-            organization_id=_receipt_organization(request,tenant_id,lease_id),
+            organization_id=organization_id,
             tenant_id=tenant_id,
             lease_id=lease_id,
             who=who,
@@ -1071,7 +1071,7 @@ async def _hold_or_resume(
         except InboxUnavailable:
             view = None
     receipt = store.record(
-        organization_id=_receipt_organization(request,tenant_id,lease_id),
+        organization_id=organization_id,
         tenant_id=tenant_id,
         lease_id=lease_id,
         who=who,
@@ -1092,6 +1092,7 @@ async def _ir_chat(request: Request, body: ChatCompletionRequest):
     grant, tenant_id, lease_id = await _open_door(request, body, ir=True)
     cache = _tickets(request)
     cached = cache.get(tenant_id, lease_id)
+    organization_id = cached.renter_organization_id if cached else None
     peer_key = cached.peer_public_key if cached else None
     peer_up = _peer_is_up(request, peer_key)
     try:
@@ -1134,6 +1135,7 @@ async def _ir_chat(request: Request, body: ChatCompletionRequest):
     if decision == "deny":
         return _policy_deny(
             request,
+            organization_id=organization_id,
             tenant_id=tenant_id,
             lease_id=lease_id,
             who=grant.subject,
@@ -1143,6 +1145,7 @@ async def _ir_chat(request: Request, body: ChatCompletionRequest):
     if decision == "hold":
         gated = await _hold_or_resume(
             request,
+            organization_id=organization_id,
             tenant_id=tenant_id,
             lease_id=lease_id,
             who=grant.subject,
@@ -1163,7 +1166,7 @@ async def _ir_chat(request: Request, body: ChatCompletionRequest):
         )
     except HTTPException:
         store.record(
-            organization_id=_receipt_organization(request,tenant_id,lease_id),
+            organization_id=organization_id,
             tenant_id=tenant_id,
             lease_id=lease_id,
             who=grant.subject,
@@ -1174,7 +1177,7 @@ async def _ir_chat(request: Request, body: ChatCompletionRequest):
         )
         raise
     store.record(
-        organization_id=_receipt_organization(request,tenant_id,lease_id),
+        organization_id=organization_id,
         tenant_id=tenant_id,
         lease_id=lease_id,
         who=grant.subject,

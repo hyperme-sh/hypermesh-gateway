@@ -364,6 +364,8 @@ async def confirm_api_key_live(
     if data is None or not _tenant_claim_is(data, tenant_id):
         cache.purge_key(fingerprint)
         raise RenterUnauthorized()
+    # A fresh validation replaces all cached authority, including absent scope.
+    cache.purge_key(fingerprint)
     if data.get('scope_kind') is not None or data.get('organization_id') is not None:
         try:
             if data.get('scope_kind')!='organization' or data.get('purpose') not in {'renter','ir','service'}:

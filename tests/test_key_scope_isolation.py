@@ -103,3 +103,41 @@ async def test_key_scope_capability_reports_runtime_enforcement(http_client,monk
     assert response.json()=={'api_key_scope_version':1,'require_key_scope':True}
     monkeypatch.setenv('HYPERMESH_REQUIRE_KEY_SCOPE','0')
     assert (await http_client.get(url)).json()['require_key_scope'] is False
+
+
+async def test_revalidation_without_scope_cannot_renew_historical_ir_authority(monkeypatch):
+    monkeypatch.setenv('HYPERMESH_REQUIRE_KEY_SCOPE','1')
+    tenant=uuid.uuid4();cache=TicketCache(key_ttl_s=0);fp=renter_key_fingerprint(TEST_RENTER_KEY)
+    answer=dict(valid=True,tenant_id=str(tenant),scope_kind='organization',organization_id=str(uuid.uuid4()),purpose='ir')
+    async def validate(**kwargs):return answer
+    app=SimpleNamespace(state=SimpleNamespace(api_key_validator=validate))
+    request=Request({'type':'http','method':'GET','path':'/v1/ir/receipts','headers':[],'app':app})
+    await confirm_api_key_live(request,tenant_id=tenant,raw_key=TEST_RENTER_KEY,fingerprint=fp,cache=cache,ir=True)
+    answer=dict(valid=True,tenant_id=str(tenant),purpose='renter')
+    with pytest.raises(RenterUnauthorized):
+        await confirm_api_key_live(request,tenant_id=tenant,raw_key=TEST_RENTER_KEY,fingerprint=fp,cache=cache,ir=True)
+    assert cache.key_scope_for(fp) is None and not cache.key_is_fresh(fp)
+
+
+async def test_ir_completion_retains_authorized_org_when_assignment_expires(http_client,app,tenant_id,tenant_headers,monkeypatch):
+    from hypermesh_gateway_service import routes
+    from test_hypermesh_gateway import _ir,_mock_runtime
+    monkeypatch.setenv('HYPERMESH_REQUIRE_KEY_SCOPE','1')
+    organization=uuid.uuid4();lease_id=uuid.uuid4()
+    app.state.ticket_cache.put(tenant_id,replace(_signed_ticket(lease_id,purpose='ir'),renter_organization_id=organization))
+    async def validate(**kwargs):
+        return dict(valid=True,tenant_id=str(tenant_id),scope_kind='organization',organization_id=str(organization),purpose='ir')
+    app.state.api_key_validator=validate
+    _mock_runtime(app)
+    proxy=routes.proxy_chat
+    async def completion(**kwargs):
+        result=await proxy(**kwargs)
+        app.state.ticket_cache.replace_from_pull(tenant_id,_ticket_pull([]))
+        return result
+    monkeypatch.setattr(routes,'proxy_chat',completion)
+    response=await http_client.post('/v1/ir/chat/completions',headers=_ir(tenant_headers),
+        json={'lease_id':str(lease_id),'messages':[{'role':'user','content':'Triage this SIEM alert and list containment steps.'}]})
+    assert response.status_code==200,response.text
+    assert app.state.ticket_cache.get(tenant_id,lease_id) is None
+    receipts=app.state.receipt_store.export_for(tenant_id,organization_id=organization)
+    assert len(receipts)==1 and receipts[0]['organization_id']==str(organization)
