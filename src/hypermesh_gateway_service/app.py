@@ -14,6 +14,7 @@ from controlplane_api.service_cors import add_optional_service_cors
 from controlplane_api.health import router as health_router
 from controlplane_api.version import router as version_router
 
+from hypermesh_gateway_service.retained_privacy import router as privacy_router
 from hypermesh_gateway_service.body_limit import BodyLimitMiddleware
 from hypermesh_gateway_service.classify import Classifier, resolve_classifier
 from hypermesh_gateway_service.errors import (
@@ -205,6 +206,7 @@ def create_app(
     app.include_router(hmg_router, prefix="/api/v1")
     app.include_router(verb_router, prefix="/api/v1")
     app.include_router(openai_router)
+    app.include_router(privacy_router)
     app.include_router(verb_openai_router)
     add_optional_service_cors(
         app,
