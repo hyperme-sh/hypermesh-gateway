@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from hypermesh_gateway_service.route_resolve import key_scope_allows
+
 import asyncio
 
 import logging
@@ -473,6 +475,8 @@ def _bind_renter_to_ticket(
     cache: TicketCache,
 ) -> None:
     require_ticket_tenant(claims, tenant_id)
+    if grant.kind=='api_key' and not key_scope_allows(cache,presented_renter_key(request),cache.get(tenant_id,claims.lease_id)):
+        raise DoorError(403,LEASE_NOT_OWNED_MESSAGE,'lease_not_owned')
     require_ticket_bound_grant(
         grant,
         ticket_tenant_id=claims.tenant_id or tenant_id,
@@ -491,6 +495,8 @@ def _bind_auditor_to_ticket(
     """IR classify binds an AIuditor key, never the renter fingerprint set."""
 
     require_ticket_tenant(claims, tenant_id)
+    if grant.kind=='api_key' and not key_scope_allows(cache,presented_renter_key(request),cache.get(tenant_id,claims.lease_id)):
+        raise DoorError(403,LEASE_NOT_OWNED_MESSAGE,'lease_not_owned')
     require_ticket_bound_grant(
         grant,
         ticket_tenant_id=claims.tenant_id or tenant_id,
@@ -653,6 +659,7 @@ async def _authorize_caller(
             raw_key=raw_key,
             fingerprint=renter_key_fingerprint(raw_key),
             cache=_tickets(request),
+            ir=ir,
         )
         await _report_key_use(request, key_id, tenant_id=tenant_id)
         return grant, tenant_id, raw_key
@@ -695,6 +702,7 @@ async def _open_door(
         if (
             requested_lease_id is not None
             and requested_lease_id in _tickets(request).revoked_lease_ids(tenant_id)
+            and key_scope_allows(_tickets(request),raw_key,_tickets(request).get(tenant_id,requested_lease_id))
         ):
             return grant, tenant_id, requested_lease_id
         raise DoorError(403, LEASE_NOT_OWNED_MESSAGE, "lease_not_owned") from exc
@@ -730,6 +738,12 @@ async def _list_models(request: Request) -> dict[str, Any]:
 
     _grant, tenant_id, raw_key = await _authorize_caller(request, ir=False)
     return _models_body(request, tenant_id, raw_key)
+
+
+@router.get('/key-scope-capabilities')
+async def key_scope_capabilities():
+    # Versioned protocol metadata only: no credentials, tenant IDs or state.
+    return {'api_key_scope_version':1,'require_key_scope':os.environ.get('HYPERMESH_REQUIRE_KEY_SCOPE')=='1'}
 
 
 @router.get("/ready")
@@ -853,6 +867,7 @@ async def _chat(request: Request, body: ChatCompletionRequest) -> StreamingRespo
     grant, tenant_id, lease_id = await _open_door(request, body, ir=False)
     cache = _tickets(request)
     cached = cache.get(tenant_id, lease_id)
+    organization_id = cached.renter_organization_id if cached else None
     peer_key = cached.peer_public_key if cached else None
     peer_up = _peer_is_up(request, peer_key)
     try:
@@ -894,6 +909,7 @@ async def _chat(request: Request, body: ChatCompletionRequest) -> StreamingRespo
         if decision == "deny":
             return _policy_deny(
                 request,
+                organization_id=organization_id,
                 tenant_id=tenant_id,
                 lease_id=lease_id,
                 who=grant.subject,
@@ -903,6 +919,7 @@ async def _chat(request: Request, body: ChatCompletionRequest) -> StreamingRespo
         if decision == "hold":
             gated = await _hold_or_resume(
                 request,
+                organization_id=organization_id,
                 tenant_id=tenant_id,
                 lease_id=lease_id,
                 who=grant.subject,
@@ -973,8 +990,10 @@ def _policy_deny(
     who: str,
     prompt_class: str,
     why: str,
+    organization_id: uuid.UUID | None = None,
 ) -> JSONResponse:
     receipt = _receipts(request).record(
+        organization_id=organization_id,
         tenant_id=tenant_id,
         lease_id=lease_id,
         who=who,
@@ -998,6 +1017,7 @@ async def _hold_or_resume(
     prompt_class: str,
     purpose: str,
     why: str,
+    organization_id: uuid.UUID | None = None,
 ) -> dict[str, object] | JSONResponse | None:
     """Hold/deny from the inbox. None means resume (proxy)."""
 
@@ -1023,6 +1043,7 @@ async def _hold_or_resume(
         return None
     if outcome == "deny":
         receipt = store.record(
+            organization_id=organization_id,
             tenant_id=tenant_id,
             lease_id=lease_id,
             who=who,
@@ -1050,6 +1071,7 @@ async def _hold_or_resume(
         except InboxUnavailable:
             view = None
     receipt = store.record(
+        organization_id=organization_id,
         tenant_id=tenant_id,
         lease_id=lease_id,
         who=who,
@@ -1070,6 +1092,7 @@ async def _ir_chat(request: Request, body: ChatCompletionRequest):
     grant, tenant_id, lease_id = await _open_door(request, body, ir=True)
     cache = _tickets(request)
     cached = cache.get(tenant_id, lease_id)
+    organization_id = cached.renter_organization_id if cached else None
     peer_key = cached.peer_public_key if cached else None
     peer_up = _peer_is_up(request, peer_key)
     try:
@@ -1112,6 +1135,7 @@ async def _ir_chat(request: Request, body: ChatCompletionRequest):
     if decision == "deny":
         return _policy_deny(
             request,
+            organization_id=organization_id,
             tenant_id=tenant_id,
             lease_id=lease_id,
             who=grant.subject,
@@ -1121,6 +1145,7 @@ async def _ir_chat(request: Request, body: ChatCompletionRequest):
     if decision == "hold":
         gated = await _hold_or_resume(
             request,
+            organization_id=organization_id,
             tenant_id=tenant_id,
             lease_id=lease_id,
             who=grant.subject,
@@ -1141,6 +1166,7 @@ async def _ir_chat(request: Request, body: ChatCompletionRequest):
         )
     except HTTPException:
         store.record(
+            organization_id=organization_id,
             tenant_id=tenant_id,
             lease_id=lease_id,
             who=grant.subject,
@@ -1151,6 +1177,7 @@ async def _ir_chat(request: Request, body: ChatCompletionRequest):
         )
         raise
     store.record(
+        organization_id=organization_id,
         tenant_id=tenant_id,
         lease_id=lease_id,
         who=grant.subject,
@@ -1187,8 +1214,16 @@ async def _export_receipts(request: Request) -> dict[str, Any]:
     """
 
     tenant_id = _tenant_id(request)
-    await require_tenant_bound_grant(request, tenant_id)
-    return {"receipts": _receipts(request).export_for(tenant_id)}
+    grant=await require_tenant_bound_grant(request, tenant_id)
+    organization=None
+    if grant.kind=='api_key':
+        raw=presented_renter_key(request)
+        if not raw:raise DoorError(401,INVALID_API_KEY_MESSAGE,'invalid_api_key')
+        await confirm_api_key_live(request,tenant_id=tenant_id,raw_key=raw,
+            fingerprint=renter_key_fingerprint(raw),cache=_tickets(request),ir=True)
+        bound=_tickets(request).key_scope_for(renter_key_fingerprint(raw))
+        if bound:organization=bound.organization_id
+    return {"receipts": _receipts(request).export_for(tenant_id,organization_id=organization)}
 
 
 @router.get("/v1/models")

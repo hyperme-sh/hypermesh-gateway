@@ -148,6 +148,7 @@ class HttpControlPlane:
                     ),
                     catalog_admitted=bool(row.get("catalog_admitted")),
                     activated_at=_parse_dt(row.get("activated_at")),
+                    renter_organization_id=uuid.UUID(str(row['renter_organization_id'])) if row.get('renter_organization_id') else None,
                 )
             )
         revoked = [uuid.UUID(str(item)) for item in body.get("revoked_lease_ids", [])]

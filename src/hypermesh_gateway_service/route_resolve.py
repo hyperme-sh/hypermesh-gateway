@@ -1,9 +1,9 @@
 """Key to lease resolution.
 
 ``resolve_route(key, requested_model)`` is the seam a later routing layer
-can replace. Today every key is tenant-owned: the policy returns every
-honoring ticket for the tenant, and ``auto`` is not a model. A later policy
-can let one key span a subset of leases and can add a routing model id.
+can replace. Authenticated organization-bound keys see only that organization's
+honoring tickets; unscoped deployments retain their existing tenant contract.
+``auto`` is not a model.
 
 paid and starting leases are upcoming. They are not tickets that honor, so
 they are not candidates. A key minted while a lease is still upcoming needs
@@ -46,12 +46,21 @@ class KeyPolicy(Protocol):
         """Leases this key may be routed to when the request omits a lease id."""
 
 
-class TenantOwnedKeyPolicy:
-    """All honoring tickets for the tenant. The key is not consulted.
+def key_scope_allows(cache, key, ticket):
+    """Key scope comes from the authenticated owner check, never a header."""
+    if key is None:return True
+    import hashlib,os
+    fingerprint=hashlib.sha256(key.encode()).hexdigest()
+    scope=cache.key_scope_for(fingerprint)
+    if scope is None:return os.environ.get('HYPERMESH_REQUIRE_KEY_SCOPE')!='1'
+    return ticket is not None and ticket.renter_organization_id==scope.organization_id
 
-    Keys are tenant-owned, never lease-owned. Swap this policy to narrow a
-    key to some leases or to recognize a routing model such as ``auto``.
-    This policy does not recognize ``auto``.
+
+class TenantOwnedKeyPolicy:
+    """Honoring tenant tickets narrowed by authenticated key organization.
+
+    Unscoped deployments retain their existing tenant-owned contract. Scoped
+    keys cannot route to unbound or foreign-organization tickets.
     """
 
     def candidate_leases(
@@ -62,8 +71,8 @@ class TenantOwnedKeyPolicy:
         key: str | None,
         purposes: frozenset[str],
     ) -> list[CachedTicket]:
-        del key
-        return cache.honoring_leases(tenant_id, purposes=purposes)
+        return [ticket for ticket in cache.honoring_leases(tenant_id,purposes=purposes)
+                if key_scope_allows(cache,key,ticket)]
 
 
 def resolve_route(
@@ -88,7 +97,7 @@ def resolve_route(
     chosen_policy = policy or TenantOwnedKeyPolicy()
     if requested_lease_id is not None:
         for ticket in cache.leases_for_tenant(tenant_id):
-            if ticket.lease_id == requested_lease_id:
+            if ticket.lease_id == requested_lease_id and key_scope_allows(cache,key,ticket):
                 return ticket
         raise LeaseNotOwned()
     candidates = chosen_policy.candidate_leases(
