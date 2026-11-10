@@ -589,7 +589,9 @@ async def _tenant_from_api_key(request: Request, raw_key: str, *, ir: bool) -> u
     return found
 
 
-async def _report_key_use(request: Request, key_id: uuid.UUID | None) -> None:
+async def _report_key_use(
+    request: Request, key_id: uuid.UUID | None, *, tenant_id: uuid.UUID
+) -> None:
     """At most one last_used write per key per minute. Failures do not fail chat."""
 
     if key_id is None:
@@ -623,7 +625,7 @@ async def _report_key_use(request: Request, key_id: uuid.UUID | None) -> None:
         async with httpx.AsyncClient(timeout=2.0) as client:
             await client.post(
                 f"{base.rstrip('/')}/api/v1/internal/touch",
-                headers={"X-Internal-Token": token},
+                headers={"X-Internal-Token": token, "X-Tenant-ID": str(tenant_id)},
                 json={"key_id": str(key_id)},
             )
     except Exception:
@@ -652,7 +654,7 @@ async def _authorize_caller(
             fingerprint=renter_key_fingerprint(raw_key),
             cache=_tickets(request),
         )
-        await _report_key_use(request, key_id)
+        await _report_key_use(request, key_id, tenant_id=tenant_id)
         return grant, tenant_id, raw_key
     tenant_id = jwt_tenant_id(grant)
     if tenant_id is None:

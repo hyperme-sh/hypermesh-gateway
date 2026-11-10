@@ -58,9 +58,9 @@
     },
     "hypermesh_gateway_service/routes.py": {
       "before_sha256": "0c74b3e5ecd3cefe31a6475cecddf43bdcf571f932879b9d0c8be7b294ef5c92",
-      "after_sha256": "22ecd3c6dd97c2fe39c23c75aef37fe66be1f70fae3a0125402bf1bb944c9584",
-      "reason": "Apply router run control, routing, and prompt text on the existing chat doors before the host hop. Count successful peer applications in the tunnel apply response.",
-      "regression_test": "tests/test_router_verbs.py; tests/test_hypermesh_gateway.py::test_tunnels_apply_uses_same_allocated_apply_path"
+      "after_sha256": "ecc5afd7cd000c3f450f3b1fd2330ec0a787636c4421f708d1481c05313654b9",
+      "reason": "Apply router run control, routing, and prompt text on the existing chat doors before the host hop. Count successful peer applications in the tunnel apply response. Bind key-use callbacks to the tenant established by caller authentication for owner RLS.",
+      "regression_test": "tests/test_router_verbs.py; tests/test_hypermesh_gateway.py::test_tunnels_apply_uses_same_allocated_apply_path; tests/test_key_touch_tenant.py"
     },
     "hypermesh_gateway_service/wg.py": {
       "before_sha256": "4b88a9dca504b011643c396bbdb5117e7224cebae87bb9b9209ff533c1221d0c",
