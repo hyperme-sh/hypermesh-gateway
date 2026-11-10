@@ -3,7 +3,7 @@
   "entry_points": null,
   "packaged_file_sha256": {
     "hypermesh_gateway_service/__init__.py": "1591ea6766941626d5a0c904c1475cca1d2264e91a717fd149ab702cbc27c08d",
-    "hypermesh_gateway_service/app.py": "345a27cb5e7ca6c7b173c0cbe87864537bf7f945f8caf3fe499fedec42a2e814",
+    "hypermesh_gateway_service/app.py": "45f7602d03a64f6cea9a02e7782a446cfa8b0e6bc4e80598f826eec85ec38f77",
     "hypermesh_gateway_service/body_limit.py": "0b6b0e1efcdd0d0602d3e5123b035d4a69650961e6a9559f07c3c509fccdf35c",
     "hypermesh_gateway_service/chat.py": "0453f76d5871962f5e93b44b70f6de6425edae5c01de6c186a7ac70af0823029",
     "hypermesh_gateway_service/classify.py": "30fe5d2ccc50152d6741a376c8c10f55a49c0d5983908dc502d618b7629c2b2a",
@@ -21,6 +21,7 @@
     "hypermesh_gateway_service/quota.py": "077a31a76b601bd32ae925df93eab23ede185e0a614885ab019183395ad4eca6",
     "hypermesh_gateway_service/receipts.py": "68c2a367c6ba8f0066efc34f34edee998bd991f08ce7efa6c7aa397332393544",
     "hypermesh_gateway_service/renter_auth.py": "39f4c270bf3b023d493ec3203a8bd67a2b189b5797198acb64cfb764bf5668b0",
+    "hypermesh_gateway_service/retained_privacy.py": "d8d192a8622b42b845c6ffd49c8de833522e9cff287123380aa41975ec33a765",
     "hypermesh_gateway_service/route_resolve.py": "32c4f76cfcfe7cc1c7b458ef259fbb45a89812b395516569d9514189018e95c4",
     "hypermesh_gateway_service/routes.py": "22ecd3c6dd97c2fe39c23c75aef37fe66be1f70fae3a0125402bf1bb944c9584",
     "hypermesh_gateway_service/safety.py": "c804ae56fa953f20c7c22d7fff502e95cba7f9a4f319b7f58000d01d51159313",

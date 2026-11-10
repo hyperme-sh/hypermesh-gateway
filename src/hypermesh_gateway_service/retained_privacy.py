@@ -3,6 +3,7 @@ import argparse
 import asyncio
 from contextlib import asynccontextmanager
 import json
+import logging
 import os
 from uuid import UUID, uuid4
 
@@ -21,6 +22,8 @@ def account(request):
     tenant, subject = jwt_tenant_id(grant), claims.get("sub")
     if (tenant is None or not isinstance(subject, str) or not subject.strip() or len(subject) > 512
             or subject.startswith(("apikey:", "service-account-")) or claims.get("client_credentials")
+            or str(claims.get("preferred_username", "")).startswith("service-account-")
+            or claims.get("gty") == "client-credentials"
             or any(claims.get(k) for k in ("api_key_id", "key_id"))
             or any(claims.get(k) == "api_key" for k in ("panopticon_auth", "spanopticon_auth"))):
         raise HTTPException(403, "An account access token is required")
@@ -36,7 +39,12 @@ async def transaction(setting, tenant, subject, lock_prefix):
     url = os.environ.get(setting)
     if not url:
         raise HTTPException(503, "Privacy store unavailable")
-    engine = create_async_engine(normalize_database_url(url), poolclass=NullPool, hide_parameters=True)
+    # SQLAlchemy DEBUG result rows can contain account data even with hidden parameters.
+    logger = logging.getLogger("sqlalchemy.engine.Engine.retained_privacy")
+    logger.setLevel(logging.WARNING)
+    logger.propagate = False
+    engine = create_async_engine(normalize_database_url(url), poolclass=NullPool,
+                                 logging_name="retained_privacy", hide_parameters=True)
     try:
         async with engine.begin() as db:
             args = {"tenant": tenant, "subject": subject}

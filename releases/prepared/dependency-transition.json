@@ -40,7 +40,7 @@
   "consumer_adaptations": {
     "hypermesh_gateway_service/app.py": {
       "before_sha256": "34ff191285b498687225b5c7aa597e747530b15d7109879a36de7a77d1e269ec",
-      "after_sha256": "345a27cb5e7ca6c7b173c0cbe87864537bf7f945f8caf3fe499fedec42a2e814",
+      "after_sha256": "45f7602d03a64f6cea9a02e7782a446cfa8b0e6bc4e80598f826eec85ec38f77",
       "reason": "Mount router prompt verbs on the existing renter chat grant. Qualification only; not live acceptance.",
       "regression_test": "tests/test_router_verbs.py"
     },
@@ -74,6 +74,11 @@
       "sha256": "44cbc184d70f84d05a82befe3901b3021bf7862a8c9d1e82244657f1ff1d48c0",
       "reason": "Process-local router prompt verbs. Unwired verbs return wired false and change nothing. Each caller can exclude at most 32 hosts.",
       "regression_test": "tests/test_router_verbs.py"
+    },
+    "hypermesh_gateway_service/retained_privacy.py": {
+      "sha256": "d8d192a8622b42b845c6ffd49c8de833522e9cff287123380aa41975ec33a765",
+      "reason": "Successor training withdrawal, deletion and history retention operations",
+      "regression_test": "tests/test_retained_privacy.py"
     }
   },
   "removed_requirements": [
