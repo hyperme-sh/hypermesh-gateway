@@ -328,6 +328,15 @@ def remote_key_validate_enabled(request: Request) -> bool:
     return bool(settings.usable_api_keys_internal_token())
 
 
+def _require_key_scope(cache, fingerprint, ir):
+    scope=cache.key_scope_for(fingerprint)
+    if scope is None:
+        if os.environ.get('HYPERMESH_REQUIRE_KEY_SCOPE')=='1':raise RenterUnauthorized()
+        return
+    if ir is not None and scope.purpose not in ({'ir'} if ir else {'renter','service'}):
+        raise RenterUnauthorized()
+
+
 async def confirm_api_key_live(
     request: Request,
     *,
@@ -335,6 +344,7 @@ async def confirm_api_key_live(
     raw_key: str,
     fingerprint: str,
     cache: Any,
+    ir: bool | None = None,
 ) -> uuid.UUID | None:
     """Re-check a key against api-keys-service at most once per TTL.
 
@@ -348,11 +358,22 @@ async def confirm_api_key_live(
     if not remote_key_validate_enabled(request):
         return cache.key_id_for(fingerprint)
     if cache.key_is_fresh(fingerprint):
+        _require_key_scope(cache,fingerprint,ir)
         return cache.key_id_for(fingerprint)
     data = await _validate_presented_key(request, raw_key=raw_key, tenant_id=tenant_id)
     if data is None or not _tenant_claim_is(data, tenant_id):
         cache.purge_key(fingerprint)
         raise RenterUnauthorized()
+    if data.get('scope_kind') is not None or data.get('organization_id') is not None:
+        try:
+            if data.get('scope_kind')!='organization' or data.get('purpose') not in {'renter','ir','service'}:
+                raise ValueError()
+            organization=uuid.UUID(str(data['organization_id']))
+            cache.remember_key_scope(fingerprint,organization,data['purpose'])
+        except (ValueError,KeyError,TypeError,AttributeError):
+            cache.purge_key(fingerprint)
+            raise RenterUnauthorized() from None
+    _require_key_scope(cache,fingerprint,ir)
     key_id: uuid.UUID | None = None
     raw_id = data.get("key_id")
     if raw_id:

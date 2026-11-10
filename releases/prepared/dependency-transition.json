@@ -52,13 +52,13 @@
     },
     "hypermesh_gateway_service/renter_auth.py": {
       "before_sha256": "085f612fa7169ab97e4dca8fb532c09f4de16a0517865bfa9dde2f1be09c07dc",
-      "after_sha256": "39f4c270bf3b023d493ec3203a8bd67a2b189b5797198acb64cfb764bf5668b0",
+      "after_sha256": "b676a3e8d21e520b9688f6bcda3c574fc7892646c95aeef3cf12899c43f779ee",
       "reason": "Run synchronous identity validation in a worker thread from async handlers; scope router state to one credential subject.",
       "regression_test": "tests/test_router_verbs.py"
     },
     "hypermesh_gateway_service/routes.py": {
       "before_sha256": "0c74b3e5ecd3cefe31a6475cecddf43bdcf571f932879b9d0c8be7b294ef5c92",
-      "after_sha256": "ecc5afd7cd000c3f450f3b1fd2330ec0a787636c4421f708d1481c05313654b9",
+      "after_sha256": "bb355b29d00f674928845344a0720df0931324061c663a6a8327baf3a0377472",
       "reason": "Apply router run control, routing, and prompt text on the existing chat doors before the host hop. Count successful peer applications in the tunnel apply response. Bind key-use callbacks to the tenant established by caller authentication for owner RLS.",
       "regression_test": "tests/test_router_verbs.py; tests/test_hypermesh_gateway.py::test_tunnels_apply_uses_same_allocated_apply_path; tests/test_key_touch_tenant.py"
     },
@@ -67,6 +67,30 @@
       "after_sha256": "2ad74a3501cd023f11542277c9566573525ea7c1997883ec385e66472ded7510",
       "reason": "Report skipped and failed WireGuard apply attempts to the caller.",
       "regression_test": "tests/test_wg_apply.py::test_skipped_or_failed_apply_is_not_reported_as_applied"
+    },
+    "hypermesh_gateway_service/control_plane.py": {
+      "before_sha256": "d924d899fb8efd544d010933ce64fb2000855d180aac9a37dade866e36fb19cc",
+      "after_sha256": "e7913eda579d8126bc6d088115e90d491befc7a907f3fc4588f73d1bf7eeb624",
+      "reason": "Enforce validated organization and purpose scope on paid tickets and durable IR receipts. Qualification only; live acceptance remains separate.",
+      "regression_test": "tests/test_key_scope_isolation.py"
+    },
+    "hypermesh_gateway_service/receipts.py": {
+      "before_sha256": "68c2a367c6ba8f0066efc34f34edee998bd991f08ce7efa6c7aa397332393544",
+      "after_sha256": "064e89feaa9944bc606008c78f9122a61e1d0962d9f62892655d2912e1039f88",
+      "reason": "Enforce validated organization and purpose scope on paid tickets and durable IR receipts. Qualification only; live acceptance remains separate.",
+      "regression_test": "tests/test_key_scope_isolation.py"
+    },
+    "hypermesh_gateway_service/route_resolve.py": {
+      "before_sha256": "32c4f76cfcfe7cc1c7b458ef259fbb45a89812b395516569d9514189018e95c4",
+      "after_sha256": "f7a56ec9a906f99080a5dd55cd2f139b87a047d9a74d2a16963301a5da9f1520",
+      "reason": "Enforce validated organization and purpose scope on paid tickets and durable IR receipts. Qualification only; live acceptance remains separate.",
+      "regression_test": "tests/test_key_scope_isolation.py"
+    },
+    "hypermesh_gateway_service/tickets.py": {
+      "before_sha256": "bc6aea3674efd7283ff5717479f47a7d430c449b7227aebff41618990926ae23",
+      "after_sha256": "706679cb352f0052bc708322dc97dd051e2917601d61b049a8897d8d65e6ab37",
+      "reason": "Enforce validated organization and purpose scope on paid tickets and durable IR receipts. Qualification only; live acceptance remains separate.",
+      "regression_test": "tests/test_key_scope_isolation.py"
     }
   },
   "added_files": {

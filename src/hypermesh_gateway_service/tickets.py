@@ -39,10 +39,17 @@ class CachedTicket:
     catalog_origin: str | None = None
     catalog_admitted: bool = False
     activated_at: datetime | None = None
+    renter_organization_id: uuid.UUID | None = None
 
     @property
     def active(self) -> bool:
         return self.status == "active" and bool(self.ticket) and bool(self.client_address)
+
+
+@dataclass(frozen=True)
+class KeyAuthorityScope:
+    organization_id: uuid.UUID
+    purpose: str
 
 
 @dataclass
@@ -71,6 +78,7 @@ class TicketCache:
         self._watched: set[uuid.UUID] = set()
         self._valid_until: dict[str, float] = {}
         self._valid_key_id: dict[str, uuid.UUID] = {}
+        self._key_scope: dict[str, KeyAuthorityScope] = {}
 
     def watch(self, tenant_id: uuid.UUID) -> None:
         """Remember a tenant so the refresh hop can pull before any ticket lands."""
@@ -185,6 +193,12 @@ class TicketCache:
         if key_id is not None:
             self._valid_key_id[fp] = key_id
 
+    def remember_key_scope(self, fingerprint: str, organization_id: uuid.UUID, purpose: str) -> None:
+        self._key_scope[_norm_fp(fingerprint)] = KeyAuthorityScope(organization_id,purpose)
+
+    def key_scope_for(self, fingerprint: str) -> KeyAuthorityScope | None:
+        return self._key_scope.get(_norm_fp(fingerprint))
+
     def key_is_fresh(self, fingerprint: str) -> bool:
         fp = _norm_fp(fingerprint)
         return time.monotonic() < self._valid_until.get(fp, 0.0)
@@ -196,6 +210,7 @@ class TicketCache:
         fp = _norm_fp(fingerprint)
         self._valid_until.pop(fp, None)
         self._valid_key_id.pop(fp, None)
+        self._key_scope.pop(fp, None)
 
     def put(self, tenant_id: uuid.UUID, ticket: CachedTicket) -> None:
         self._tickets[(tenant_id, ticket.lease_id)] = ticket

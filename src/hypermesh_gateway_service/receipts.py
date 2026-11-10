@@ -45,6 +45,7 @@ class Receipt:
     time: datetime
     lease_id: uuid.UUID
     tenant_id: uuid.UUID
+    organization_id: uuid.UUID | None = None
 
     def as_export(self) -> dict[str, str]:
         """Customer export row. No prompt or completion body."""
@@ -60,6 +61,7 @@ class Receipt:
                 "time": self.time.astimezone(UTC).isoformat().replace("+00:00", "Z"),
                 "lease_id": str(self.lease_id),
                 "tenant_id": str(self.tenant_id),
+                **({'organization_id':str(self.organization_id)} if self.organization_id else {}),
             }
         )
 
@@ -82,6 +84,9 @@ def sanitize_receipt_payload(payload: dict[str, Any]) -> dict[str, str]:
         if key not in payload:
             continue
         cleaned[key] = str(payload[key])
+    if payload.get('organization_id'):
+        try:cleaned['organization_id']=str(uuid.UUID(str(payload['organization_id'])))
+        except (ValueError,TypeError,AttributeError):pass
     return cleaned
 
 
@@ -110,6 +115,7 @@ class ReceiptStore:
         prompt_class: str,
         decision: Decision,
         now: datetime | None = None,
+        organization_id: uuid.UUID | None = None,
     ) -> Receipt:
         receipt = Receipt(
             receipt_id=uuid.uuid4(),
@@ -121,6 +127,7 @@ class ReceiptStore:
             time=now if now is not None else datetime.now(UTC),
             lease_id=lease_id,
             tenant_id=tenant_id,
+            organization_id=organization_id,
         )
         bucket = self._rows.setdefault(tenant_id, [])
         bucket.append(receipt)
@@ -130,8 +137,9 @@ class ReceiptStore:
         self._flush()
         return receipt
 
-    def export_for(self, tenant_id: uuid.UUID) -> list[dict[str, str]]:
-        rows = list(self._rows.get(tenant_id, ()))
+    def export_for(self, tenant_id: uuid.UUID, *, organization_id: uuid.UUID | None = None) -> list[dict[str, str]]:
+        rows = [row for row in self._rows.get(tenant_id, ())
+                if organization_id is None or row.organization_id==organization_id]
         return [row.as_export() for row in rows]
 
     def count_for(self, tenant_id: uuid.UUID) -> int:
@@ -150,7 +158,7 @@ class ReceiptStore:
             if not isinstance(item, dict):
                 continue
             cleaned = sanitize_receipt_payload(item)
-            if set(cleaned) != RECEIPT_KEYS:
+            if set(cleaned)-{'organization_id'} != RECEIPT_KEYS:
                 continue
             try:
                 receipt = Receipt(
@@ -163,6 +171,7 @@ class ReceiptStore:
                     time=datetime.fromisoformat(cleaned["time"].replace("Z", "+00:00")),
                     lease_id=uuid.UUID(cleaned["lease_id"]),
                     tenant_id=uuid.UUID(cleaned["tenant_id"]),
+                    organization_id=uuid.UUID(cleaned['organization_id']) if cleaned.get('organization_id') else None,
                 )
             except (ValueError, KeyError):
                 continue
