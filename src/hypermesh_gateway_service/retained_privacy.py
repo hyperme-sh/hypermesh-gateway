@@ -63,7 +63,7 @@ class Withdrawal(BaseModel):
 
 @router.put("/v1/account/training-consent")
 async def withdraw(request: Request, body: Withdrawal, response: Response):
-    tenant, subject = account(request)
+    tenant, subject = await asyncio.to_thread(account, request)
     if body.enabled:
         raise HTTPException(409, "Training enrollment unavailable")
     async with transaction("HYPERMESH_TRAINING_DATABASE_URL", tenant, subject, "training-account") as (db, args):
@@ -76,7 +76,7 @@ async def withdraw(request: Request, body: Withdrawal, response: Response):
 
 @router.delete("/v1/account/training-submissions")
 async def delete_submissions(request: Request, response: Response):
-    tenant, subject = account(request)
+    tenant, subject = await asyncio.to_thread(account, request)
     async with transaction("HYPERMESH_TRAINING_DATABASE_URL", tenant, subject, "training-account") as (db, args):
         consent = (await db.execute(text("""SELECT enabled FROM public.hypermesh_training_consents
             WHERE tenant_id=:tenant AND subject=:subject FOR UPDATE"""), args)).scalar_one_or_none()

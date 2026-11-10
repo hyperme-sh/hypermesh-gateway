@@ -13,3 +13,25 @@ def test_exchanged_key_cannot_withdraw_account_consent(monkeypatch, extra):
     with pytest.raises(HTTPException) as denied:
         privacy.account(SimpleNamespace())
     assert denied.value.status_code == 403
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("operation", ["withdraw", "delete_submissions"])
+async def test_account_validation_runs_without_an_event_loop(monkeypatch, operation):
+    import asyncio
+    from fastapi import Response
+
+    class Authenticated(Exception):
+        pass
+
+    def validate(request):
+        with pytest.raises(RuntimeError, match="no running event loop"):
+            asyncio.get_running_loop()
+        raise Authenticated
+
+    monkeypatch.setattr(privacy, "require_renter_grant", validate)
+    with pytest.raises(Authenticated):
+        if operation == "withdraw":
+            await privacy.withdraw(SimpleNamespace(), privacy.Withdrawal(enabled=False), Response())
+        else:
+            await privacy.delete_submissions(SimpleNamespace(), Response())

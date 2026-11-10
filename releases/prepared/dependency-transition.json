@@ -76,7 +76,7 @@
       "regression_test": "tests/test_router_verbs.py"
     },
     "hypermesh_gateway_service/retained_privacy.py": {
-      "sha256": "d8d192a8622b42b845c6ffd49c8de833522e9cff287123380aa41975ec33a765",
+      "sha256": "8464bc3553762de7f215ed984f5402c0ad49f0e78be12eb69bb5bc16b39c4a02",
       "reason": "Successor training withdrawal, deletion and history retention operations",
       "regression_test": "tests/test_retained_privacy.py"
     }
