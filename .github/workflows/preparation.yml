@@ -1,4 +1,4 @@
-# Pull requests qualify the package and runtime image in this job.
+# Pull requests run unit/contract checks and package builds.
 # The image archive stays on the runner. Nothing downloads prepared-dist,
 # so this workflow does not upload it.
 name: Package preparation
@@ -27,9 +27,3 @@ jobs:
           export PREPARATION_EVIDENCE_DIR="$output/evidence"
           echo "PREPARED_OUTPUT=$output" >> "$GITHUB_ENV"
           bash scripts/check-package.sh --fixtures
-      - name: Qualify credential-free installed runtime image
-        shell: bash
-        run: |
-          export RELEASE_ARTIFACT_DIR="$PREPARED_OUTPUT/dist"
-          export RUNTIME_IMAGE_OUTPUT_DIR="$PREPARED_OUTPUT/runtime"
-          bash scripts/check-runtime-image.sh

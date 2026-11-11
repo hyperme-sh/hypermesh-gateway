@@ -7,6 +7,7 @@ returns; usage does not vanish.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
@@ -144,11 +145,22 @@ class MeterQueue:
         self._path = Path(persist_path) if persist_path else None
         self._max = max_pending
         self._rows: dict[uuid.UUID, PendingMetric] = {}
+        self._reservations: set[uuid.UUID] = set()
         if self._path is not None:
             self._load()
 
     def is_full(self) -> bool:
-        return len(self._rows) >= self._max
+        return len(self._rows) + len(self._reservations) >= self._max
+
+    def reserve(self) -> uuid.UUID:
+        if self.is_full():
+            raise MeterQueueFull("usage queue is full")
+        token = uuid.uuid4()
+        self._reservations.add(token)
+        return token
+
+    def release(self, token: uuid.UUID) -> None:
+        self._reservations.discard(token)
 
     def pending_count(self) -> int:
         return len(self._rows)
@@ -167,8 +179,12 @@ class MeterQueue:
         handshake_count: int,
         metric_id: uuid.UUID | None = None,
         now: datetime | None = None,
+        reservation: uuid.UUID | None = None,
     ) -> PendingMetric:
-        if self.is_full():
+        if reservation is not None:
+            if reservation not in self._reservations:
+                raise ValueError("invalid usage reservation")
+        elif self.is_full():
             raise MeterQueueFull("usage queue is full")
         item = PendingMetric(
             metric_id=metric_id or uuid.uuid4(),
@@ -180,6 +196,8 @@ class MeterQueue:
             handshake_count=max(0, int(handshake_count)),
             recorded_at=now if now is not None else datetime.now(UTC),
         )
+        if reservation is not None:
+            self.release(reservation)
         self._rows[item.metric_id] = item
         self._flush()
         return item
@@ -249,21 +267,27 @@ def resolve_meter_queue(path: str | os.PathLike[str] | None = None) -> MeterQueu
     return MeterQueue(persist_path=persist, max_pending=max_pending)
 
 
-async def flush_meter_queue(plane: ControlPlane, queue: MeterQueue) -> int:
+async def flush_meter_queue(
+    plane: ControlPlane, queue: MeterQueue, *, batch_size: int = 32, budget_s: float = 1.0
+) -> int:
     """Deliver oldest pending first. Stop on the first hop failure."""
 
     sent = 0
-    for item in queue.pending():
+    deadline = asyncio.get_running_loop().time() + budget_s
+    for item in queue.pending()[:batch_size]:
+        if asyncio.get_running_loop().time() >= deadline:
+            break
         try:
-            await plane.post_metrics(
-                item.tenant_id,
-                tunnel_id=item.tunnel_id,
-                lease_id=item.lease_id,
-                bytes_in=item.bytes_in,
-                bytes_out=item.bytes_out,
-                handshake_count=item.handshake_count,
-                metric_id=item.metric_id,
-            )
+            async with asyncio.timeout_at(deadline):
+                await plane.post_metrics(
+                    item.tenant_id,
+                    tunnel_id=item.tunnel_id,
+                    lease_id=item.lease_id,
+                    bytes_in=item.bytes_in,
+                    bytes_out=item.bytes_out,
+                    handshake_count=item.handshake_count,
+                    metric_id=item.metric_id,
+                )
         except Exception:
             logger.info("metrics flush deferred")
             break
@@ -283,6 +307,7 @@ async def report_session_metrics(
     bytes_out: int,
     handshake_count: int = 0,
     quota: ChatQuota | None = None,
+    reservation: uuid.UUID | None = None,
 ) -> None:
     """Queue first, then POST. Chat callers ignore hop failures."""
 
@@ -293,7 +318,7 @@ async def report_session_metrics(
         bytes_out=bytes_out,
         handshake_count=handshake_count,
     )
-    item = queue.enqueue(tenant_id=tenant_id, **payload)
+    item = queue.enqueue(tenant_id=tenant_id, reservation=reservation, **payload)
     if quota is not None and lease_id is not None:
         quota.add_bytes(lease_id, item.bytes_in + item.bytes_out)
     try:

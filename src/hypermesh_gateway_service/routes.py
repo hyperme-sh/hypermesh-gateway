@@ -6,8 +6,11 @@ from hypermesh_gateway_service.route_resolve import key_scope_allows
 
 import asyncio
 
+import anyio
+
 import logging
 import os
+import time
 import uuid
 from datetime import UTC, datetime
 from typing import Any
@@ -51,6 +54,7 @@ from hypermesh_gateway_service.policy import (
 )
 from hypermesh_gateway_service.metrics import (
     MeterQueue,
+    MeterQueueFull,
     flush_meter_queue,
     report_session_metrics,
 )
@@ -173,6 +177,13 @@ def _router_body(
     if prepared is None:
         return body
     return ChatCompletionRequest.model_validate(prepared)
+
+
+def _reserve_meter(request: Request) -> uuid.UUID:
+    try:
+        return _meters(request).reserve()
+    except MeterQueueFull as exc:
+        raise HTTPException(status_code=429, detail="usage queue is full") from exc
 
 
 def _require_door_capacity(request: Request, lease_id: uuid.UUID) -> None:
@@ -412,6 +423,9 @@ def _peer_is_up(request: Request, peer_public_key: str | None) -> bool:
 
 
 def _content_length(request: Request) -> int:
+    measured = request.scope.get("gateway.body_bytes")
+    if measured is not None:
+        return int(measured)
     raw = request.headers.get("content-length")
     if raw and raw.isdigit():
         return int(raw)
@@ -425,15 +439,37 @@ def _stream_chat(
 ) -> StreamingResponse:
     """Pass host bytes through. Do not parse or buffer the completion."""
 
+    finalized = False
+
+    async def finalize():
+        nonlocal finalized
+        if finalized:
+            return
+        finalized = True
+        # Protect cleanup from StreamingResponse's disconnect cancel scope.
+        with anyio.CancelScope(shield=True):
+            try:
+                if after_bytes is not None:
+                    await after_bytes(proxied.bytes_out)
+            finally:
+                await proxied.aclose()
+
     async def chunks():
         try:
             async for chunk in iter_chat_bytes(proxied):
                 yield chunk
         finally:
-            if after_bytes is not None:
-                await after_bytes(proxied.bytes_out)
+            await finalize()
 
-    return StreamingResponse(
+    class MeteredStreamingResponse(StreamingResponse):
+        async def __call__(self, scope, receive, send):
+            try:
+                await super().__call__(scope, receive, send)
+            finally:
+                # Header-send failures happen before the iterator is entered.
+                await finalize()
+
+    return MeteredStreamingResponse(
         chunks(),
         media_type=proxied.media_type,
         headers={"x-accel-buffering": "no"},
@@ -574,14 +610,22 @@ async def _tenant_from_api_key(request: Request, raw_key: str, *, ir: bool) -> u
         return found
     plane = _control(request)
     list_index = getattr(plane, "list_key_index", None)
-    entries: list[Any] = []
-    if list_index is not None:
-        try:
-            entries = list(await list_index())
-        except Exception:
-            logger.info("key index refresh skipped")
-            entries = []
-    _note_index(cache, entries)
+    lock = getattr(request.app.state, "key_index_lock", None)
+    if lock is None:
+        lock = asyncio.Lock()
+        request.app.state.key_index_lock = lock
+    async with lock:
+        if time.monotonic() >= getattr(request.app.state, "key_index_retry_at", 0):
+            if list_index is not None:
+                try:
+                    async with asyncio.timeout(5.0):
+                        entries = list(await list_index())
+                    _note_index(cache, entries)
+                except Exception:
+                    logger.info("key index refresh skipped")
+                finally:
+                    # Waiters share a completed attempt, including a timeout.
+                    request.app.state.key_index_retry_at = time.monotonic() + 5.0
     hinted = _cached_key_tenant(cache, fingerprint, ir=ir)
     if hinted is None:
         raise DoorError(401, INVALID_API_KEY_MESSAGE, "invalid_api_key")
@@ -931,13 +975,18 @@ async def _chat(request: Request, body: ChatCompletionRequest) -> StreamingRespo
                 return gated
     runtime = getattr(request.app.state, "runtime_client", None)
     _gate_router_run(request, tenant_id, lease_id)
-    proxied = await proxy_chat(
-        lease_id=lease_id,
-        payload=body.model_dump(mode="json"),
-        client_address=claims.client_address,
-        runtime_client=runtime,
-    )
-    rx, tx, handshakes = peer_counters(peer_key or "")
+    reservation = _reserve_meter(request)
+    try:
+        proxied = await proxy_chat(
+            lease_id=lease_id,
+            payload=body.model_dump(mode="json"),
+            client_address=claims.client_address,
+            runtime_client=runtime,
+        )
+    except BaseException:
+        _meters(request).release(reservation)
+        raise
+    _, _, handshakes = peer_counters(peer_key or "")
 
     async def _meter(bytes_out: int) -> None:
         await report_session_metrics(
@@ -946,10 +995,11 @@ async def _chat(request: Request, body: ChatCompletionRequest) -> StreamingRespo
             _meters(request),
             tunnel_id=cached.tunnel_id if cached else None,
             lease_id=lease_id,
-            bytes_in=_content_length(request) or rx,
-            bytes_out=bytes_out or tx,
+            bytes_in=_content_length(request),
+            bytes_out=bytes_out,
             handshake_count=handshakes,
             quota=_quota(request),
+            reservation=reservation,
         )
 
     return _stream_chat(proxied, after_bytes=_meter)
@@ -978,8 +1028,8 @@ async def _load_policies(
 ) -> list[PolicyView]:
     try:
         return await _inbox(request).policies(tenant_id, purpose=purpose)
-    except InboxUnavailable:
-        return []
+    except InboxUnavailable as exc:
+        raise HTTPException(status_code=503, detail="Policy service unavailable") from exc
 
 
 def _policy_deny(
@@ -1156,6 +1206,7 @@ async def _ir_chat(request: Request, body: ChatCompletionRequest):
         if gated is not None:
             return gated
     runtime = getattr(request.app.state, "runtime_client", None)
+    reservation = _reserve_meter(request)
     try:
         _gate_router_run(request, tenant_id, lease_id)
         proxied = await proxy_chat(
@@ -1164,7 +1215,8 @@ async def _ir_chat(request: Request, body: ChatCompletionRequest):
             client_address=claims.client_address,
             runtime_client=runtime,
         )
-    except HTTPException:
+    except BaseException:
+        _meters(request).release(reservation)
         store.record(
             organization_id=organization_id,
             tenant_id=tenant_id,
@@ -1186,7 +1238,7 @@ async def _ir_chat(request: Request, body: ChatCompletionRequest):
         prompt_class=classified.prompt_class,
         decision="allow",
     )
-    rx, tx, handshakes = peer_counters(peer_key or "")
+    _, _, handshakes = peer_counters(peer_key or "")
 
     async def _meter(bytes_out: int) -> None:
         await report_session_metrics(
@@ -1195,10 +1247,11 @@ async def _ir_chat(request: Request, body: ChatCompletionRequest):
             _meters(request),
             tunnel_id=cached.tunnel_id if cached else None,
             lease_id=lease_id,
-            bytes_in=_content_length(request) or rx,
-            bytes_out=bytes_out or tx,
+            bytes_in=_content_length(request),
+            bytes_out=bytes_out,
             handshake_count=handshakes,
             quota=_quota(request),
+            reservation=reservation,
         )
 
     return _stream_chat(proxied, after_bytes=_meter)

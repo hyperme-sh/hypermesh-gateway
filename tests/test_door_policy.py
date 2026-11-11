@@ -220,24 +220,28 @@ async def test_ir_policy_can_deny_a_class(
 
 
 @pytest.mark.asyncio
-async def test_policy_hop_failure_leaves_renter_unclassified(
-    http_client, tenant_headers, app, tenant_id
+@pytest.mark.parametrize("ir", [False, True])
+@pytest.mark.parametrize("disposition", ["deny", "hold"])
+async def test_policy_hop_failure_refuses_renter(
+    http_client, tenant_headers, app, tenant_id, ir, disposition
 ):
     lease_id = uuid.uuid4()
     inbox = FakeApprovalInbox()
     inbox.policy_error = "down"
-    inbox.policy_rows = [PolicyView(purpose="renter", disposition="deny")]
+    inbox.policy_rows = [PolicyView(purpose="ir" if ir else "renter", disposition=disposition)]
     app.state.approval_inbox = inbox
-    app.state.ticket_cache.put(tenant_id, _signed_ticket(lease_id, purpose="renter"))
-    _mock_runtime(app)
+    app.state.ticket_cache.put(tenant_id, _signed_ticket(lease_id, purpose="ir" if ir else "renter"))
+    app.state.ticket_cache.accept_ir_keys(tenant_id, TEST_IR_FINGERPRINTS)
+    async def forbidden(request):
+        raise AssertionError("policy outage must not reach host")
+    app.state.runtime_client = httpx.AsyncClient(transport=httpx.MockTransport(forbidden))
     chat = await http_client.post(
-        "/v1/chat/completions",
-        headers=renter_headers(tenant_headers),
+        "/v1/ir/chat/completions" if ir else "/v1/chat/completions",
+        headers=(ir_headers if ir else renter_headers)(tenant_headers),
         json={
             "lease_id": str(lease_id),
             "messages": [{"role": "user", "content": "Write a haiku about coffee."}],
         },
     )
-    assert chat.status_code == 200
-    assert chat.json()["object"] == "chat.completion"
+    assert chat.status_code == 503
     assert inbox.hold_calls == []

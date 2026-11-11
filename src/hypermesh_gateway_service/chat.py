@@ -156,14 +156,14 @@ def _new_tool_call_id() -> str:
     return "call_" + secrets.token_hex(12)
 
 
-def fill_tool_call_ids(payload: dict[str, Any], ids: dict[int, str]) -> bool:
+def fill_tool_call_ids(payload: dict[str, Any], ids: dict, *, emitted: set | None = None) -> bool:
     """Fill blank tool_calls[].id. The same index keeps the same id."""
 
     changed = False
     choices = payload.get("choices")
     if not isinstance(choices, list):
         return False
-    for choice in choices:
+    for choice_position, choice in enumerate(choices):
         if not isinstance(choice, dict):
             continue
         for key in ("message", "delta"):
@@ -181,6 +181,14 @@ def fill_tool_call_ids(payload: dict[str, Any], ids: dict[int, str]) -> bool:
                     index = int(raw_index)
                 except (TypeError, ValueError):
                     index = position
+                index = (choice.get("index", choice_position), index)
+                if emitted is not None and index in emitted:
+                    if "id" in call:
+                        del call["id"]
+                        changed = True
+                    continue
+                if emitted is not None:
+                    emitted.add(index)
                 current = call.get("id")
                 if isinstance(current, str) and current.strip():
                     ids[index] = current
@@ -197,7 +205,8 @@ class SseToolCallIds:
 
     def __init__(self) -> None:
         self._pending = b""
-        self._ids: dict[int, str] = {}
+        self._ids: dict = {}
+        self._emitted: set = set()
 
     def feed(self, chunk: bytes) -> bytes:
         self._pending += chunk
@@ -231,7 +240,7 @@ class SseToolCallIds:
             payload = json.loads(raw)
         except json.JSONDecodeError:
             return line
-        if not isinstance(payload, dict) or not fill_tool_call_ids(payload, self._ids):
+        if not isinstance(payload, dict) or not fill_tool_call_ids(payload, self._ids, emitted=self._emitted):
             return line
         body = json.dumps(payload, separators=(",", ":"), ensure_ascii=False)
         return f"data: {body}\n".encode()
