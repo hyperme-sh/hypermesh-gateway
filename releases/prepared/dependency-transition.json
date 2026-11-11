@@ -52,15 +52,15 @@
     },
     "hypermesh_gateway_service/renter_auth.py": {
       "before_sha256": "085f612fa7169ab97e4dca8fb532c09f4de16a0517865bfa9dde2f1be09c07dc",
-      "after_sha256": "d944e93641ee441cf85081ba021927796e4eb944e85fcb81c1ffd32a6e801f95",
-      "reason": "Run synchronous identity validation in a worker thread from async handlers; scope router state to one credential subject.",
-      "regression_test": "tests/test_router_verbs.py"
+      "after_sha256": "d555dc1867e01216e71b3f6aa0eb5dc51263251afcd14d074c41193f69f7ebd8",
+      "reason": "Accept signed native tenant sessions while preserving tenant and expiry checks.",
+      "regression_test": "tests/test_renter_auth.py"
     },
     "hypermesh_gateway_service/routes.py": {
       "before_sha256": "0c74b3e5ecd3cefe31a6475cecddf43bdcf571f932879b9d0c8be7b294ef5c92",
-      "after_sha256": "f3442b36990308c19bfaa057a22866076cb0b3df0b97bbde245796a0ded710b8",
-      "reason": "Apply router run control, routing, and prompt text on the existing chat doors before the host hop. Count successful peer applications in the tunnel apply response. Bind key-use callbacks to the tenant established by caller authentication for owner RLS.",
-      "regression_test": "tests/test_router_verbs.py; tests/test_hypermesh_gateway.py::test_tunnels_apply_uses_same_allocated_apply_path; tests/test_key_touch_tenant.py"
+      "after_sha256": "5162bfac9397d74155d6460e0651249d1e470a8a78d6df53227174dafb109848",
+      "reason": "Bound unknown-key refreshes, fail closed on policy outages, and reserve accurate usage before forwarding.",
+      "regression_test": "tests/test_backlog_regressions.py; tests/test_door_policy.py"
     },
     "hypermesh_gateway_service/wg.py": {
       "before_sha256": "4b88a9dca504b011643c396bbdb5117e7224cebae87bb9b9209ff533c1221d0c",
@@ -91,6 +91,30 @@
       "after_sha256": "706679cb352f0052bc708322dc97dd051e2917601d61b049a8897d8d65e6ab37",
       "reason": "Enforce validated organization and purpose scope on paid tickets and durable IR receipts. Qualification only; live acceptance remains separate.",
       "regression_test": "tests/test_key_scope_isolation.py"
+    },
+    "hypermesh_gateway_service/body_limit.py": {
+      "before_sha256": "0b6b0e1efcdd0d0602d3e5123b035d4a69650961e6a9559f07c3c509fccdf35c",
+      "after_sha256": "8f8049a92a64100eee54885b1c440b2f5e870dd961583a0daacb1008027d02eb",
+      "reason": "Measure request bytes before parsing for admission and usage accounting.",
+      "regression_test": "tests/test_backlog_regressions.py"
+    },
+    "hypermesh_gateway_service/chat.py": {
+      "before_sha256": "0453f76d5871962f5e93b44b70f6de6425edae5c01de6c186a7ac70af0823029",
+      "after_sha256": "e896a17752da5aae2adaed7d751f4fb9502a7cf7b81a0b578e55253b8137a70a",
+      "reason": "Emit streaming tool identifiers once per choice and call.",
+      "regression_test": "tests/test_backlog_regressions.py"
+    },
+    "hypermesh_gateway_service/metrics.py": {
+      "before_sha256": "9ad3996aa45c000d8bc851682c3feb4b154a281d9818abe4101b00c34bdaa5af",
+      "after_sha256": "5b9373be153187900b33fe425bcf1fac45cf41fe52ed3e12dda3457798049afd",
+      "reason": "Reserve queue capacity before forwarding and bound backlog drain work.",
+      "regression_test": "tests/test_backlog_regressions.py"
+    },
+    "hypermesh_gateway_service/safety.py": {
+      "before_sha256": "c804ae56fa953f20c7c22d7fff502e95cba7f9a4f319b7f58000d01d51159313",
+      "after_sha256": "fd6e21d0e080822826497110c5dc77d058f447e1483ceca914d74c748195c49f",
+      "reason": "Bound protective-context checks without repeated prefix scans.",
+      "regression_test": "tests/test_backlog_regressions.py; tests/test_safety_screening.py"
     }
   },
   "added_files": {

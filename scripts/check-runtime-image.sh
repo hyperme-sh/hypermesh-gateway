@@ -6,6 +6,11 @@ scratch=$(mktemp -d)
 image="hypermesh-gateway:qualification-${GITHUB_RUN_ID:-local}-${GITHUB_RUN_ATTEMPT:-1}-${BASHPID}"
 probe=''
 server=''
+ci_labels=()
+if [[ "${GATEWAY_NIGHTLY:-0}" == 1 ]]; then
+  labels=$(python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); from ci_resources import label_args; print("\n".join(label_args()))' "$NIGHTLY_FRAMEWORK_ROOT/scripts")
+  mapfile -t ci_labels <<< "$labels"
+fi
 cleanup() {
   if [[ -n "$server" ]]; then docker rm -f "$server" >/dev/null 2>&1 || true; fi
   if [[ -n "$probe" ]]; then rm -f "$probe"; fi
@@ -29,7 +34,7 @@ built_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 docker build --build-arg "SOURCE_SHA=$source_sha" --build-arg "BUILT_AT=$built_at" \
   -t "$image" "$scratch/context"
 # No tun, NET_ADMIN, peer configuration, live hosts or provider calls in package CI.
-docker run --rm --network none --cap-drop ALL --read-only \
+docker run --rm "${ci_labels[@]}" --network none --cap-drop ALL --read-only \
   --env HYPERMESH_WG_APPLY=0 --env HYPERMESH_ASSIGNMENT_REFRESH_S=0 \
   "$image" /app/.venv/bin/python -I -c '
 import importlib, importlib.util, json, shutil, subprocess
@@ -48,7 +53,7 @@ from hypermesh_gateway_service.app import create_app
 assert create_app().openapi()["paths"]
 print(json.dumps({"installed_gateway": True, "wireguard_tools_available": True}))'
 # Exercise the shipped CMD; importing the ASGI application skips its server.
-server=$(docker run -d --network none --cap-drop ALL --read-only --tmpfs /tmp \
+server=$(docker run -d "${ci_labels[@]}" --network none --cap-drop ALL --read-only --tmpfs /tmp \
   -e HYPERMESH_WG_APPLY=0 -e HYPERMESH_ASSIGNMENT_REFRESH_S=0 "$image")
 docker exec "$server" /app/.venv/bin/python -I -c '
 import json, time, urllib.request
@@ -64,7 +69,7 @@ for attempt in range(30):
 docker rm -f "$server" >/dev/null
 server=''
 status=0
-docker run --rm --network none --cap-drop ALL --read-only --env PATH=/app/.venv/bin \
+docker run --rm "${ci_labels[@]}" --network none --cap-drop ALL --read-only --env PATH=/app/.venv/bin \
   "$image" >"$scratch/missing.out" 2>&1 || status=$?
 test "$status" = 78
 grep -F 'Missing WireGuard runtime tool:' "$scratch/missing.out" >/dev/null
@@ -74,4 +79,8 @@ if [[ -n "${RUNTIME_IMAGE_OUTPUT_DIR:-}" ]]; then
   sha256sum "$RUNTIME_IMAGE_OUTPUT_DIR/image.tar" | cut -d ' ' -f 1 > "$RUNTIME_IMAGE_OUTPUT_DIR/image.sha256"
   printf '%s\n' "$image" > "$RUNTIME_IMAGE_OUTPUT_DIR/image.ref"
   cp "$scratch/context/runtime-inputs.json" "$RUNTIME_IMAGE_OUTPUT_DIR/"
+fi
+
+if [[ "${GATEWAY_NIGHTLY:-0}" == 1 ]]; then
+  python3 "$NIGHTLY_FRAMEWORK_ROOT/scripts/nightly/gateway.py" --image "$image"
 fi

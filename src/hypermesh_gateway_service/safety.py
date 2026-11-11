@@ -194,15 +194,9 @@ _ACCESS = _rx(
 
 
 def _protective_context(sample: str, start: int, end: int) -> bool:
-    message_start = sample.rfind("\n", 0, start) + 1
-    message_end = sample.find("\n", end)
-    if message_end < 0:
-        message_end = len(sample)
-    if _ACCESS.search(sample, message_start, message_end):
-        return False
-    line_start = max(sample.rfind("\n", 0, start), sample.rfind(".", 0, start),
-                     sample.rfind("?", 0, start), sample.rfind("!", 0, start)) + 1
-    lo = max(line_start, start - _GUARD_LOOKBACK)
+    lo = max(0, start - _GUARD_LOOKBACK)
+    line_start = max(sample.rfind(delimiter, lo, start) for delimiter in "\n.?!") + 1
+    lo = max(line_start, lo)
     for found in _PROTECTIVE.finditer(sample, lo, end):
         if found.start() >= start:
             # Protective words inside the match do not govern it.

@@ -69,6 +69,7 @@ class BodyLimitMiddleware:
                 return
             chunks.append(chunk)
             more = message.get("more_body", False)
+        scope["gateway.body_bytes"] = size
         body = b"".join(chunks)
         replayed = False
 

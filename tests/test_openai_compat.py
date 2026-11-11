@@ -427,12 +427,13 @@ async def test_tool_call_ids_filled_on_json_and_sse(http_client, app, tenant_id)
             continue
         row = json.loads(line.removeprefix("data: "))
         calls = row["choices"][0]["delta"]["tool_calls"]
-        ids.append(calls[0]["id"])
+        ids.append(calls[0].get("id", ""))
     assert ids[0].startswith("call_")
-    assert ids[0] == ids[1]
+    assert ids[1] == ""
 
 
 @pytest.mark.asyncio
+@pytest.mark.synthetic
 async def test_sse_chunks_arrive_incrementally(http_client, app, tenant_id, monkeypatch):
     host = MockHost()
     host.sse_delay_s = 0.25

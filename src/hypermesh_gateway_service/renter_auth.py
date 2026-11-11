@@ -134,6 +134,11 @@ def verify_jwt_locally(
     exchanged = try_decode_api_key_session_jwt(token)
     if exchanged is not None:
         return exchanged
+    from controlplane_identity.security.tenant_session_jwt import try_decode_tenant_session_jwt
+
+    native = try_decode_tenant_session_jwt(token)
+    if native is not None:
+        return native
     if validator is not None:
         try:
             return validator.validate_sync(token)

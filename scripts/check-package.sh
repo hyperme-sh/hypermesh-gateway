@@ -38,9 +38,23 @@ if (( ${#fixture_wheels[@]} )); then
   uv pip install --no-config --python .venv/bin/python --no-deps --reinstall "${fixture_wheels[@]}"
 fi
 .venv/bin/python scripts/verify_preparation_environment.py "$PWD"
+test_selection=(-m 'not synthetic')
+if [[ "${GATEWAY_NIGHTLY:-0}" == 1 ]]; then
+  [[ "${GITHUB_ACTIONS:-}" == true && "${GITHUB_EVENT_NAME:-}" == schedule && "${GITHUB_REF:-}" == refs/heads/main ]] || exit 2
+  test_selection=()
+fi
 scratch=$(mktemp -d)
-trap 'rm -rf "$scratch"' EXIT
-uv run --frozen "${run_options[@]}" pytest --junitxml="$scratch/source.xml"
+cleanup() {
+  if [[ -n "${TEST_EVIDENCE_DIR:-}" ]]; then
+    mkdir -p "$TEST_EVIDENCE_DIR"
+    for file in "$scratch"/*.xml; do
+      [[ -f "$file" ]] && cp "$file" "$TEST_EVIDENCE_DIR/"
+    done
+  fi
+  rm -rf "$scratch"
+}
+trap cleanup EXIT
+uv run --frozen "${run_options[@]}" pytest "${test_selection[@]}" --junitxml="$scratch/source.xml"
 uv run --frozen "${run_options[@]}" pytest -q tests_tools
 uv build --out-dir "$scratch/dist"
 uv run --frozen "${run_options[@]}" python scripts/verify_wheel.py "$scratch/dist"
@@ -54,7 +68,7 @@ uv pip uninstall --python "$scratch/venv/bin/python" controlplane-core controlpl
 uv pip install --python "$scratch/venv/bin/python" --constraint "$scratch/requirements.txt" "$scratch"/dist/*.whl
 fi
 cp -R tests "$scratch/"
-(cd "$scratch" && "$scratch/venv/bin/python" -I -m pytest -c /dev/null -o asyncio_mode=auto -o asyncio_default_fixture_loop_scope=function tests --junitxml="$scratch/wheel.xml")
+(cd "$scratch" && "$scratch/venv/bin/python" -I -m pytest -c /dev/null -o asyncio_mode=auto -o asyncio_default_fixture_loop_scope=function tests "${test_selection[@]}" --junitxml="$scratch/wheel.xml")
 # Rebuild from the sdist; a checkout must not supply omitted package files.
 uv run --frozen "${run_options[@]}" python - "$scratch" <<'PY'
 import pathlib, sys, tarfile
@@ -65,7 +79,7 @@ PY
 uv build --wheel "$scratch"/sdist/* --out-dir "$scratch/rebuilt"
 uv run --frozen "${run_options[@]}" python scripts/verify_wheel.py "$scratch/rebuilt"
 uv pip install --no-config --python "$scratch/venv/bin/python" --no-deps --reinstall "$scratch"/rebuilt/*.whl
-(cd "$scratch" && "$scratch/venv/bin/python" -I -m pytest -c /dev/null -o asyncio_mode=auto -o asyncio_default_fixture_loop_scope=function tests --junitxml="$scratch/sdist.xml")
+(cd "$scratch" && "$scratch/venv/bin/python" -I -m pytest -c /dev/null -o asyncio_mode=auto -o asyncio_default_fixture_loop_scope=function tests "${test_selection[@]}" --junitxml="$scratch/sdist.xml")
 
 # Bind the declared candidate to the bytes exercised by every consumer.
 python3 scripts/export_release_contract.py "$scratch"/dist/*.whl --output "$scratch/contract"

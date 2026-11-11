@@ -125,6 +125,7 @@ class _Host:
 
 
 @pytest.mark.asyncio
+@pytest.mark.synthetic
 async def test_ready_stays_up_when_one_lease_host_is_down(
     http_client, tenant_headers, app, tenant_id, monkeypatch
 ):

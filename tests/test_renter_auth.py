@@ -350,3 +350,23 @@ def test_ticket_bound_grant_rejects_unknown_key_and_unbound_jwt(tenant_id):
             key_fingerprints=[],
             presented_key=None,
         )
+
+
+def test_native_tenant_session_signature_and_tenant_binding(monkeypatch):
+    from controlplane_identity.configuration import settings
+    from controlplane_identity.security.tenant_session_jwt import mint_tenant_session_jwt
+    import jwt
+    monkeypatch.setattr(settings, 'api_key_exchange_jwt_secret', 'native-gateway-unit-secret-32-characters-minimum')
+    monkeypatch.delenv('ACCOUNT_CLOSURE_ENFORCEMENT_ENABLED', raising=False)
+    tenant = uuid.uuid4()
+    token = mint_tenant_session_jwt(claims={'sub': 'native-user'}, tenant_id=tenant)
+    grant = require_renter_grant(_request(authorization=f'Bearer {token}', tenant_id=tenant))
+    assert grant.claims['sub'] == 'native-user'
+    with pytest.raises(RenterUnauthorized):
+        require_renter_grant(_request(authorization=f'Bearer {token}', tenant_id=uuid.uuid4()))
+    claims = jwt.decode(token, options={'verify_signature': False})
+    invalid = jwt.encode(claims, 'different-unit-secret-32-characters-minimum', algorithm='HS256')
+    assert verify_jwt_locally(invalid) is None
+    claims['exp'] = 1
+    expired = jwt.encode(claims, settings.api_key_exchange_jwt_secret, algorithm='HS256')
+    assert verify_jwt_locally(expired) is None

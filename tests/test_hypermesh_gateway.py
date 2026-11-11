@@ -170,6 +170,7 @@ async def test_proxy_chat_cached_ticket_does_not_call_get_lease(control_plane):
 
 
 @pytest.mark.asyncio
+@pytest.mark.synthetic
 async def test_proxy_chat_yields_first_chunk_before_upstream_finishes(monkeypatch):
     import threading
     from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
