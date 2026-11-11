@@ -6,6 +6,8 @@ from hypermesh_gateway_service.route_resolve import key_scope_allows
 
 import asyncio
 
+import anyio
+
 import logging
 import os
 import time
@@ -437,15 +439,37 @@ def _stream_chat(
 ) -> StreamingResponse:
     """Pass host bytes through. Do not parse or buffer the completion."""
 
+    finalized = False
+
+    async def finalize():
+        nonlocal finalized
+        if finalized:
+            return
+        finalized = True
+        # Protect cleanup from StreamingResponse's disconnect cancel scope.
+        with anyio.CancelScope(shield=True):
+            try:
+                if after_bytes is not None:
+                    await after_bytes(proxied.bytes_out)
+            finally:
+                await proxied.aclose()
+
     async def chunks():
         try:
             async for chunk in iter_chat_bytes(proxied):
                 yield chunk
         finally:
-            if after_bytes is not None:
-                await after_bytes(proxied.bytes_out)
+            await finalize()
 
-    return StreamingResponse(
+    class MeteredStreamingResponse(StreamingResponse):
+        async def __call__(self, scope, receive, send):
+            try:
+                await super().__call__(scope, receive, send)
+            finally:
+                # Header-send failures happen before the iterator is entered.
+                await finalize()
+
+    return MeteredStreamingResponse(
         chunks(),
         media_type=proxied.media_type,
         headers={"x-accel-buffering": "no"},
@@ -592,8 +616,6 @@ async def _tenant_from_api_key(request: Request, raw_key: str, *, ir: bool) -> u
         request.app.state.key_index_lock = lock
     async with lock:
         if time.monotonic() >= getattr(request.app.state, "key_index_retry_at", 0):
-            # Set before awaiting: failed refreshes are also rate limited.
-            request.app.state.key_index_retry_at = time.monotonic() + 5.0
             if list_index is not None:
                 try:
                     async with asyncio.timeout(5.0):
@@ -601,6 +623,9 @@ async def _tenant_from_api_key(request: Request, raw_key: str, *, ir: bool) -> u
                     _note_index(cache, entries)
                 except Exception:
                     logger.info("key index refresh skipped")
+                finally:
+                    # Waiters share a completed attempt, including a timeout.
+                    request.app.state.key_index_retry_at = time.monotonic() + 5.0
     hinted = _cached_key_tenant(cache, fingerprint, ir=ir)
     if hinted is None:
         raise DoorError(401, INVALID_API_KEY_MESSAGE, "invalid_api_key")

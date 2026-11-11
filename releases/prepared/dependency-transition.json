@@ -58,7 +58,7 @@
     },
     "hypermesh_gateway_service/routes.py": {
       "before_sha256": "0c74b3e5ecd3cefe31a6475cecddf43bdcf571f932879b9d0c8be7b294ef5c92",
-      "after_sha256": "5162bfac9397d74155d6460e0651249d1e470a8a78d6df53227174dafb109848",
+      "after_sha256": "b09240690f678ff50e98a4df6e33cc00484a97ac402d35bab78c3c4938fb992d",
       "reason": "Bound unknown-key refreshes, fail closed on policy outages, and reserve accurate usage before forwarding.",
       "regression_test": "tests/test_backlog_regressions.py; tests/test_door_policy.py"
     },

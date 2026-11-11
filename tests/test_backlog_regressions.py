@@ -175,3 +175,78 @@ async def test_cancelled_host_hop_releases_usage_capacity(http_client, app, tena
         await task
     assert not app.state.meter_queue.is_full()
     assert not app.state.meter_queue._reservations
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('failure', ['disconnect', 'cancel', 'none'])
+@pytest.mark.parametrize('spec_version', ['2.0', '2.4'])
+async def test_response_finalizes_usage_even_before_body_starts(failure, spec_version):
+    from hypermesh_gateway_service.chat import ProxiedChat
+    from hypermesh_gateway_service.routes import _stream_chat
+    from starlette.requests import ClientDisconnect
+
+    queue = MeterQueue(max_pending=1)
+    reservation = queue.reserve()
+    upstream = httpx.Response(200, content=b'completion')
+    proxied = ProxiedChat(upstream)
+    calls = []
+
+    async def meter(size):
+        calls.append(size)
+        queue.enqueue(tenant_id=uuid.uuid4(), tunnel_id=None, lease_id=None,
+                      bytes_in=2, bytes_out=size, handshake_count=0, reservation=reservation)
+
+    async def receive():
+        await asyncio.Event().wait()
+
+    async def send(message):
+        if message['type'] == 'http.response.start':
+            if failure == 'disconnect':
+                raise OSError('client disconnected before headers')
+            if failure == 'cancel':
+                raise asyncio.CancelledError()
+
+    response = _stream_chat(proxied, after_bytes=meter)
+    scope = {'type': 'http', 'asgi': {'spec_version': spec_version}}
+    if failure == 'none' or (spec_version == '2.0' and failure == 'cancel'):
+        # The older ASGI task-group path suppresses child cancellation.
+        await response(scope, receive, send)
+    else:
+        with pytest.raises((OSError, ClientDisconnect, asyncio.CancelledError, BaseExceptionGroup)):
+            await response(scope, receive, send)
+    assert calls == ([10] if failure == 'none' else [0])
+    assert not queue._reservations
+    assert queue.pending_count() == 1
+    assert proxied._closed
+
+
+@pytest.mark.asyncio
+async def test_stalled_index_waiters_share_timeout_cooldown(monkeypatch):
+    import hypermesh_gateway_service.routes as routes
+    entered, finish = asyncio.Event(), asyncio.Event()
+    clock = [100.0]
+    # Replace only this module's clock, not asyncio's event-loop clock.
+    monkeypatch.setattr(routes, 'time', SimpleNamespace(monotonic=lambda: clock[0]))
+    calls = 0
+
+    async def index():
+        nonlocal calls
+        calls += 1
+        entered.set()
+        await finish.wait()
+        clock[0] += 5.0
+        raise TimeoutError('index timed out')
+
+    state = SimpleNamespace(ticket_cache=TicketCache(), control_plane=SimpleNamespace(list_key_index=index))
+    request = Request({'type': 'http', 'app': SimpleNamespace(state=state)})
+    tasks = [asyncio.create_task(_tenant_from_api_key(request, f'pk_test.timeout-{i}', ir=False)) for i in range(20)]
+    await entered.wait()
+    finish.set()
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+    assert all(isinstance(result, DoorError) for result in results)
+    assert calls == 1
+    assert state.key_index_retry_at == 110.0
+    clock[0] = 110.0
+    with pytest.raises(DoorError):
+        await _tenant_from_api_key(request, 'pk_test.retry-after-timeout', ir=False)
+    assert calls == 2
