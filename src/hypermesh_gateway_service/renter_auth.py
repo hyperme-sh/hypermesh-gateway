@@ -118,7 +118,7 @@ def _forbidden_identity(token: str) -> bool:
     return token.startswith((GATEWAY_SECRET_HEAD, DEVICE_SECRET_HEAD, SITE_TOKEN_HEAD, TICKET_PREFIX))
 
 
-def verify_jwt_locally(
+def _decode_jwt_locally(
     token: str,
     *,
     validator: JwtValidator | None = None,
@@ -156,6 +156,81 @@ def verify_jwt_locally(
     except Exception:
         logger.info("renter jwt rejected")
         return None
+
+
+def verify_jwt_locally(token: str, *, validator: JwtValidator | None = None, ledger=None) -> dict[str, Any] | None:
+    from controlplane_identity.account_lifecycle import enforcement_enabled, offline_gateway_verification
+    from hypermesh_gateway_service.account_ledger import LedgerUnavailable
+    # This scope skips only the shared control-plane HTTP guard. Cryptographic
+    # verification remains mandatory, followed by durable local denial checks.
+    with offline_gateway_verification():
+        claims = _decode_jwt_locally(token, validator=validator)
+    if claims is None or not enforcement_enabled():
+        return claims
+    try:
+        return claims if ledger is not None and not ledger.claims_blocked(claims) else None
+    except LedgerUnavailable:
+        return None
+
+
+def verified_bootstrap_tenant(request: Request) -> uuid.UUID | None:
+    """Verify a JWT solely to select bootstrap scope; this grants no access."""
+    _reject_ambiguous_credentials(request)
+    from controlplane_identity.account_lifecycle import offline_gateway_verification
+    token = _bearer(request)
+    if not token or not looks_like_jwt(token):
+        return None
+    validator = getattr(request.app.state, "renter_jwt_validator", None)
+    with offline_gateway_verification():
+        return _uuid_claim(_decode_jwt_locally(token, validator=validator))
+
+
+async def bootstrap_account_authority(request: Request, tenant: uuid.UUID) -> None:
+    from controlplane_identity.account_lifecycle import enforcement_enabled
+    from hypermesh_gateway_service.account_ledger import LedgerUnavailable
+    if not enforcement_enabled():
+        return
+    ledger = getattr(request.app.state, "account_ledger", None)
+    cache = getattr(request.app.state, "ticket_cache", None)
+    plane = getattr(request.app.state, "control_plane", None)
+    try:
+        if ledger is None or cache is None:
+            raise LedgerUnavailable()
+        if not ledger.tenant_ready(tenant):
+            if plane is None:
+                raise LedgerUnavailable()
+            tunnels = await plane.list_tunnels(tenant)
+            pull = await plane.list_tickets(tenant)
+            cache.replace_from_pull(tenant, pull, tunnels=tunnels)
+    except Exception:
+        raise RenterUnauthorized() from None
+
+
+async def require_account_grant(request: Request) -> RenterGrant:
+    """Bootstrap a verified account's tenant before mandatory local denial."""
+    from controlplane_identity.account_lifecycle import enforcement_enabled
+    if enforcement_enabled():
+        tenant = await asyncio.to_thread(verified_bootstrap_tenant, request)
+        if tenant is not None:
+            await bootstrap_account_authority(request, tenant)
+    return await asyncio.to_thread(require_renter_grant, request)
+
+
+def _require_key_open(request: Request, raw: str) -> None:
+    from controlplane_identity.account_lifecycle import enforcement_enabled
+    from hypermesh_gateway_service.account_ledger import LedgerUnavailable
+    if not enforcement_enabled():
+        return
+    ledger = getattr(request.app.state, "account_ledger", None)
+    cache = getattr(request.app.state, "ticket_cache", None)
+    fingerprint = renter_key_fingerprint(raw)
+    tenant = (cache.tenant_for_fingerprint(fingerprint) or cache.tenant_for_fingerprint(fingerprint, ir=True)) if cache is not None else None
+    try:
+        key_id = cache.key_id_for(fingerprint) if cache is not None else None
+        if ledger is None or tenant is None or ledger.key_blocked(tenant, fingerprint) or (key_id is not None and ledger.claims_blocked({"sub": f"apikey:{key_id}", "tenant_id": str(tenant)})):
+            raise RenterUnauthorized()
+    except LedgerUnavailable:
+        raise RenterUnauthorized() from None
 
 
 def _subject_from_jwt(claims: dict[str, Any]) -> str:
@@ -228,17 +303,19 @@ def require_renter_grant(request: Request, *, bind_tenant_header: bool = True) -
         if _forbidden_identity(bearer):
             raise RenterUnauthorized()
         if looks_like_jwt(bearer):
-            claims = verify_jwt_locally(bearer, validator=validator)
+            claims = verify_jwt_locally(bearer, validator=validator, ledger=getattr(request.app.state, "account_ledger", None))
             if claims is None or not _tenant_matches(claims, tenant_hdr):
                 raise RenterUnauthorized()
             return RenterGrant(kind="jwt", subject=_subject_from_jwt(claims), claims=claims)
         if looks_like_api_key(bearer):
+            _require_key_open(request, bearer)
             return RenterGrant(kind="api_key", subject=_subject_from_api_key(bearer))
         raise RenterUnauthorized()
 
     if header_key:
         if _forbidden_identity(header_key) or not looks_like_api_key(header_key):
             raise RenterUnauthorized()
+        _require_key_open(request, header_key)
         return RenterGrant(kind="api_key", subject=_subject_from_api_key(header_key))
 
     raise RenterUnauthorized()
@@ -432,6 +509,17 @@ async def require_tenant_bound_grant(request: Request, tenant_id: uuid.UUID) -> 
     to another tenant. An unreachable or unconfigured api-keys-service denies.
     """
 
+    from controlplane_identity.account_lifecycle import enforcement_enabled
+    if enforcement_enabled():
+        raw_key = presented_renter_key(request)
+        if raw_key is not None:
+            from hypermesh_gateway_service.routes import _tenant_from_api_key
+            actual = await _tenant_from_api_key(request, raw_key, ir=True)
+            if actual != tenant_id:
+                raise RenterUnauthorized()
+        elif await asyncio.to_thread(verified_bootstrap_tenant, request) != tenant_id:
+            raise RenterUnauthorized()
+        await bootstrap_account_authority(request, tenant_id)
     grant = await asyncio.to_thread(require_renter_grant, request)
     if grant.kind == "jwt":
         if not _tenant_claim_is(grant.claims, tenant_id):

@@ -40,9 +40,9 @@
   "consumer_adaptations": {
     "hypermesh_gateway_service/app.py": {
       "before_sha256": "34ff191285b498687225b5c7aa597e747530b15d7109879a36de7a77d1e269ec",
-      "after_sha256": "45f7602d03a64f6cea9a02e7782a446cfa8b0e6bc4e80598f826eec85ec38f77",
-      "reason": "Mount router prompt verbs on the existing renter chat grant. Qualification only; not live acceptance.",
-      "regression_test": "tests/test_router_verbs.py"
+      "after_sha256": "1525e0ed16403541221440af5e8a15d18912aaee0352477a6bcf99601006b150",
+      "reason": "Adopt local account retirement and retained owner operations without enabling collection.",
+      "regression_test": "tests/test_account_ledger.py; tests/test_closure_receiver_identity.py; tests/test_account_owner_discovery.py"
     },
     "hypermesh_gateway_service/posture.py": {
       "before_sha256": "d4adb4ee599c64af597e2eec69ddb62a496f36dd619c02a686253475eab727ec",
@@ -52,15 +52,15 @@
     },
     "hypermesh_gateway_service/renter_auth.py": {
       "before_sha256": "085f612fa7169ab97e4dca8fb532c09f4de16a0517865bfa9dde2f1be09c07dc",
-      "after_sha256": "d555dc1867e01216e71b3f6aa0eb5dc51263251afcd14d074c41193f69f7ebd8",
-      "reason": "Accept signed native tenant sessions while preserving tenant and expiry checks.",
-      "regression_test": "tests/test_renter_auth.py"
+      "after_sha256": "eb0f7e254090c700f06ff7c858f496b2ae143133511651bebe0b894dda3a59ce",
+      "reason": "Adopt local account retirement and retained owner operations without enabling collection.",
+      "regression_test": "tests/test_account_ledger.py; tests/test_closure_receiver_identity.py; tests/test_account_owner_discovery.py"
     },
     "hypermesh_gateway_service/routes.py": {
       "before_sha256": "0c74b3e5ecd3cefe31a6475cecddf43bdcf571f932879b9d0c8be7b294ef5c92",
-      "after_sha256": "b09240690f678ff50e98a4df6e33cc00484a97ac402d35bab78c3c4938fb992d",
-      "reason": "Bound unknown-key refreshes, fail closed on policy outages, and reserve accurate usage before forwarding.",
-      "regression_test": "tests/test_backlog_regressions.py; tests/test_door_policy.py"
+      "after_sha256": "361ecf7eea78cc48b29a54da00413edc29fe392bd95741dec79b5b49078e326f",
+      "reason": "Adopt local account retirement and retained owner operations without enabling collection.",
+      "regression_test": "tests/test_account_ledger.py; tests/test_closure_receiver_identity.py; tests/test_account_owner_discovery.py"
     },
     "hypermesh_gateway_service/wg.py": {
       "before_sha256": "4b88a9dca504b011643c396bbdb5117e7224cebae87bb9b9209ff533c1221d0c",
@@ -70,9 +70,9 @@
     },
     "hypermesh_gateway_service/control_plane.py": {
       "before_sha256": "d924d899fb8efd544d010933ce64fb2000855d180aac9a37dade866e36fb19cc",
-      "after_sha256": "e7913eda579d8126bc6d088115e90d491befc7a907f3fc4588f73d1bf7eeb624",
-      "reason": "Enforce validated organization and purpose scope on paid tickets and durable IR receipts. Qualification only; live acceptance remains separate.",
-      "regression_test": "tests/test_key_scope_isolation.py"
+      "after_sha256": "458a69bdaca3b2a62ea2789f1ad1e847b0053bd37f566f3204abe041c8bb1961",
+      "reason": "Adopt local account retirement and retained owner operations without enabling collection.",
+      "regression_test": "tests/test_account_ledger.py; tests/test_closure_receiver_identity.py; tests/test_account_owner_discovery.py"
     },
     "hypermesh_gateway_service/receipts.py": {
       "before_sha256": "68c2a367c6ba8f0066efc34f34edee998bd991f08ce7efa6c7aa397332393544",
@@ -88,9 +88,9 @@
     },
     "hypermesh_gateway_service/tickets.py": {
       "before_sha256": "bc6aea3674efd7283ff5717479f47a7d430c449b7227aebff41618990926ae23",
-      "after_sha256": "706679cb352f0052bc708322dc97dd051e2917601d61b049a8897d8d65e6ab37",
-      "reason": "Enforce validated organization and purpose scope on paid tickets and durable IR receipts. Qualification only; live acceptance remains separate.",
-      "regression_test": "tests/test_key_scope_isolation.py"
+      "after_sha256": "94e3bc187e24487718c56e0e71f3cf81169d253e94412e96cbb86a2c956365d8",
+      "reason": "Adopt local account retirement and retained owner operations without enabling collection.",
+      "regression_test": "tests/test_account_ledger.py; tests/test_closure_receiver_identity.py; tests/test_account_owner_discovery.py"
     },
     "hypermesh_gateway_service/body_limit.py": {
       "before_sha256": "0b6b0e1efcdd0d0602d3e5123b035d4a69650961e6a9559f07c3c509fccdf35c",
@@ -124,9 +124,44 @@
       "regression_test": "tests/test_router_verbs.py"
     },
     "hypermesh_gateway_service/retained_privacy.py": {
-      "sha256": "8464bc3553762de7f215ed984f5402c0ad49f0e78be12eb69bb5bc16b39c4a02",
-      "reason": "Successor training withdrawal, deletion and history retention operations",
-      "regression_test": "tests/test_retained_privacy.py"
+      "sha256": "7124c22f9f2a237ea34756a0f4a639b4c48a5e857d2cd0b705a4f8774b289a1f",
+      "reason": "Adopt local account retirement and retained owner operations without enabling collection.",
+      "regression_test": "tests/test_account_ledger.py; tests/test_closure_receiver_identity.py; tests/test_account_owner_discovery.py"
+    },
+    "hypermesh_gateway_service/account_closure.py": {
+      "sha256": "2bda8bc403a49dcc7de0caeeae42e0b51a6564049162eeddcda4bc80c0476f3f",
+      "reason": "Adopt local account retirement and retained owner operations without enabling collection.",
+      "regression_test": "tests/test_account_ledger.py; tests/test_closure_receiver_identity.py; tests/test_account_owner_discovery.py"
+    },
+    "hypermesh_gateway_service/account_ledger.py": {
+      "sha256": "c27e3fb9208d28cc8dd67dbb4942c7a4be262963dff2a81655839a1ea8cc332f",
+      "reason": "Adopt local account retirement and retained owner operations without enabling collection.",
+      "regression_test": "tests/test_account_ledger.py; tests/test_closure_receiver_identity.py; tests/test_account_owner_discovery.py"
+    },
+    "hypermesh_gateway_service/account_owners.py": {
+      "sha256": "aba392940a83ec8b547047a5b379a1e839b0ba9d7de8f5749b828a260234c9ee",
+      "reason": "Adopt local account retirement and retained owner operations without enabling collection.",
+      "regression_test": "tests/test_account_ledger.py; tests/test_closure_receiver_identity.py; tests/test_account_owner_discovery.py"
+    },
+    "hypermesh_gateway_service/history.py": {
+      "sha256": "7ca71b670ecf33d6d43cfd600a467719cc4fedc4b794d49e44b8fee56c1e8eeb",
+      "reason": "Adopt local account retirement and retained owner operations without enabling collection.",
+      "regression_test": "tests/test_account_ledger.py; tests/test_closure_receiver_identity.py; tests/test_account_owner_discovery.py"
+    },
+    "hypermesh_gateway_service/models.py": {
+      "sha256": "3f901e1f575518fddafdac25bfac01dba22e4df131a53b289df7604885885bdd",
+      "reason": "Adopt local account retirement and retained owner operations without enabling collection.",
+      "regression_test": "tests/test_account_ledger.py; tests/test_closure_receiver_identity.py; tests/test_account_owner_discovery.py"
+    },
+    "hypermesh_gateway_service/private_storage.py": {
+      "sha256": "9a288b10a279e731a1e69687e3a86057f937b52c6280768391bc14bcf902aaed",
+      "reason": "Adopt local account retirement and retained owner operations without enabling collection.",
+      "regression_test": "tests/test_account_ledger.py; tests/test_closure_receiver_identity.py; tests/test_account_owner_discovery.py"
+    },
+    "hypermesh_gateway_service/training.py": {
+      "sha256": "0b7a68d9050be6dc3693ecda412dabf4634a03473252ad8d68456f504b2d8080",
+      "reason": "Adopt local account retirement and retained owner operations without enabling collection.",
+      "regression_test": "tests/test_account_ledger.py; tests/test_closure_receiver_identity.py; tests/test_account_owner_discovery.py"
     }
   },
   "removed_requirements": [

@@ -685,6 +685,14 @@ async def _report_key_use(
 async def _authorize_caller(
     request: Request, *, ir: bool
 ) -> tuple[RenterGrant, uuid.UUID, str | None]:
+    from controlplane_identity.account_lifecycle import enforcement_enabled
+    from hypermesh_gateway_service.renter_auth import bootstrap_account_authority, verified_bootstrap_tenant
+    if enforcement_enabled():
+        pending_key = presented_renter_key(request)
+        bootstrap_tenant = (await _tenant_from_api_key(request, pending_key, ir=ir)
+                            if pending_key else await asyncio.to_thread(verified_bootstrap_tenant, request))
+        if bootstrap_tenant is not None:
+            await bootstrap_account_authority(request, bootstrap_tenant)
     if ir:
         grant = await asyncio.to_thread(require_auditor_grant, request, bind_tenant_header=False)
     else:

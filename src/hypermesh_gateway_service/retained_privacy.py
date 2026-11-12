@@ -11,13 +11,13 @@ from fastapi import APIRouter, HTTPException, Request, Response
 from pydantic import BaseModel, ConfigDict, StrictBool
 from sqlalchemy import text
 
-from hypermesh_gateway_service.renter_auth import jwt_tenant_id, require_renter_grant
+from hypermesh_gateway_service.renter_auth import jwt_tenant_id, require_renter_grant, require_account_grant
 
 router = APIRouter()
 
 
-def account(request):
-    grant = require_renter_grant(request)
+def account(request, grant=None):
+    grant = grant or require_renter_grant(request)
     claims = grant.claims or {}
     tenant, subject = jwt_tenant_id(grant), claims.get("sub")
     if (tenant is None or not isinstance(subject, str) or not subject.strip() or len(subject) > 512
@@ -63,7 +63,7 @@ class Withdrawal(BaseModel):
 
 @router.put("/v1/account/training-consent")
 async def withdraw(request: Request, body: Withdrawal, response: Response):
-    tenant, subject = await asyncio.to_thread(account, request)
+    tenant, subject = account(request, await require_account_grant(request))
     if body.enabled:
         raise HTTPException(409, "Training enrollment unavailable")
     async with transaction("HYPERMESH_TRAINING_DATABASE_URL", tenant, subject, "training-account") as (db, args):
@@ -76,7 +76,7 @@ async def withdraw(request: Request, body: Withdrawal, response: Response):
 
 @router.delete("/v1/account/training-submissions")
 async def delete_submissions(request: Request, response: Response):
-    tenant, subject = await asyncio.to_thread(account, request)
+    tenant, subject = account(request, await require_account_grant(request))
     async with transaction("HYPERMESH_TRAINING_DATABASE_URL", tenant, subject, "training-account") as (db, args):
         consent = (await db.execute(text("""SELECT enabled FROM public.hypermesh_training_consents
             WHERE tenant_id=:tenant AND subject=:subject FOR UPDATE"""), args)).scalar_one_or_none()

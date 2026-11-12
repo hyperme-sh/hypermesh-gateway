@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import os
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, AsyncExitStack
 
 from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.responses import JSONResponse
@@ -87,46 +87,51 @@ def create_app(
     async def lifespan(app: FastAPI):
         configure_logging()
         app.state.control_plane = resolve_control_plane(control_plane)
-        app.state.ticket_cache = TicketCache()
-        seed_watched_tenants(app.state.ticket_cache)
-        app.state.receipt_store = receipt_store or resolve_receipt_store(receipt_persist_path)
-        app.state.meter_queue = meter_queue or resolve_meter_queue(meter_persist_path)
-        app.state.chat_quota = chat_quota or resolve_chat_quota()
-        app.state.classifier = classifier or resolve_classifier()
-        app.state.approval_inbox = resolve_approval_inbox(approval_inbox)
-        app.state.safety_classifier = safety_classifier or resolve_safety_classifier()
-        app.state.safety_recorder = SafetyRecorder()
-        if gateway_service_secret is not None:
-            app.state.gateway_service_secret = gateway_service_secret
-        refresh_s = float(os.environ.get("HYPERMESH_ASSIGNMENT_REFRESH_S", "30"))
-        stop = asyncio.Event()
+        async with AsyncExitStack() as owners:
+            from hypermesh_gateway_service.account_ledger import resolve_ledger
+            app.state.account_ledger = await asyncio.to_thread(resolve_ledger)
+            from hypermesh_gateway_service.account_owners import open_owners
+            await owners.enter_async_context(open_owners(app.state))
+            app.state.ticket_cache = TicketCache(account_ledger=app.state.account_ledger)
+            seed_watched_tenants(app.state.ticket_cache)
+            app.state.receipt_store = receipt_store or resolve_receipt_store(receipt_persist_path)
+            app.state.meter_queue = meter_queue or resolve_meter_queue(meter_persist_path)
+            app.state.chat_quota = chat_quota or resolve_chat_quota()
+            app.state.classifier = classifier or resolve_classifier()
+            app.state.approval_inbox = resolve_approval_inbox(approval_inbox)
+            app.state.safety_classifier = safety_classifier or resolve_safety_classifier()
+            app.state.safety_recorder = SafetyRecorder()
+            if gateway_service_secret is not None:
+                app.state.gateway_service_secret = gateway_service_secret
+            refresh_s = float(os.environ.get("HYPERMESH_ASSIGNMENT_REFRESH_S", "30"))
+            stop = asyncio.Event()
 
-        async def _refresh_loop() -> None:
-            if refresh_s <= 0:
-                return
-            while not stop.is_set():
-                await refresh_known_tenants(
-                    app.state.control_plane,
-                    app.state.ticket_cache,
-                    app.state.meter_queue,
-                    app.state.safety_recorder,
-                )
-                try:
-                    await asyncio.wait_for(stop.wait(), timeout=refresh_s)
+            async def _refresh_loop() -> None:
+                if refresh_s <= 0:
                     return
-                except asyncio.TimeoutError:
-                    continue
+                while not stop.is_set():
+                    await refresh_known_tenants(
+                        app.state.control_plane,
+                        app.state.ticket_cache,
+                        app.state.meter_queue,
+                        app.state.safety_recorder,
+                    )
+                    try:
+                        await asyncio.wait_for(stop.wait(), timeout=refresh_s)
+                        return
+                    except asyncio.TimeoutError:
+                        continue
 
-        task = asyncio.create_task(_refresh_loop())
-        try:
-            yield
-        finally:
-            stop.set()
-            task.cancel()
+            task = asyncio.create_task(_refresh_loop())
             try:
-                await task
-            except (asyncio.CancelledError, Exception):
-                pass
+                yield
+            finally:
+                stop.set()
+                task.cancel()
+                try:
+                    await task
+                except (asyncio.CancelledError, Exception):
+                    pass
 
     app = FastAPI(
         lifespan=lifespan,
@@ -206,6 +211,8 @@ def create_app(
     app.include_router(hmg_router, prefix="/api/v1")
     app.include_router(verb_router, prefix="/api/v1")
     app.include_router(openai_router)
+    from hypermesh_gateway_service.account_closure import router as closure_router
+    app.include_router(closure_router)
     app.include_router(privacy_router)
     app.include_router(verb_openai_router)
     add_optional_service_cors(

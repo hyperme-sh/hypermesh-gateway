@@ -29,7 +29,7 @@ async def test_account_validation_runs_without_an_event_loop(monkeypatch, operat
             asyncio.get_running_loop()
         raise Authenticated
 
-    monkeypatch.setattr(privacy, "require_renter_grant", validate)
+    monkeypatch.setattr("hypermesh_gateway_service.renter_auth.require_renter_grant", validate)
     with pytest.raises(Authenticated):
         if operation == "withdraw":
             await privacy.withdraw(SimpleNamespace(), privacy.Withdrawal(enabled=False), Response())
