@@ -54,6 +54,9 @@ class GatewayTunnel:
 
 
 class ControlPlane(Protocol):
+    async def gateway_identity(self, tenant_id: uuid.UUID) -> uuid.UUID: ...
+
+
     async def list_tunnels(self, tenant_id: uuid.UUID) -> list[GatewayTunnel]: ...
 
     async def list_tickets(self, tenant_id: uuid.UUID) -> TicketPull: ...
@@ -87,6 +90,22 @@ class HttpControlPlane:
             "Authorization": f"Bearer {self._secret}",
             "X-Tenant-ID": str(tenant_id),
         }
+
+    async def gateway_identity(self, tenant_id: uuid.UUID) -> uuid.UUID:
+        async with httpx.AsyncClient(
+            timeout=5, trust_env=False, follow_redirects=False
+        ) as client:
+            response = await client.get(
+                f"{self._base}/api/v1/hypermesh/gateway/identity",
+                headers=self._headers(tenant_id),
+            )
+        if response.status_code != 200:
+            raise PermissionError("Gateway identity unavailable")
+        body = response.json()
+        if not isinstance(body, dict) or body.get("tenant_id") != str(tenant_id):
+            raise PermissionError("Gateway identity scope mismatch")
+        return uuid.UUID(body["gateway_id"])
+
 
     async def list_tunnels(self, tenant_id: uuid.UUID) -> list[GatewayTunnel]:
         async with httpx.AsyncClient(timeout=15.0) as client:
@@ -173,6 +192,7 @@ class HttpControlPlane:
             key_fingerprints=fingerprints,
             ir_key_fingerprints=ir_fingerprints,
             revoked_key_fingerprints=revoked_keys,
+            closure_snapshot=body.get("closure_snapshot"),
         )
 
     async def list_key_index(self) -> list[KeyIndexEntry]:
@@ -267,6 +287,7 @@ class FakeControlPlane:
         tunnels: list[GatewayTunnel] | None = None,
         service_secret: str = "hm_gw_test",
     ) -> None:
+        self.gateway_id = None
         self.leases = leases or {}
         self.tunnels = tunnels or []
         self.ticket_pull = TicketPull(tickets=[], revoked_lease_ids=[])
@@ -282,6 +303,12 @@ class FakeControlPlane:
         self.key_index: list[KeyIndexEntry] = []
         self.safety_flags: list[Any] = []
         self.fail_safety_flags = False
+
+    async def gateway_identity(self, tenant_id: uuid.UUID) -> uuid.UUID:
+        if self.gateway_id is None:
+            raise PermissionError("Gateway identity unavailable")
+        return self.gateway_id
+
 
     async def get_lease(self, tenant_id: uuid.UUID, lease_id: uuid.UUID) -> LeaseView | None:
         self.get_lease_calls += 1
@@ -303,6 +330,7 @@ class FakeControlPlane:
             key_fingerprints=list(self.ticket_pull.key_fingerprints),
             ir_key_fingerprints=list(self.ticket_pull.ir_key_fingerprints),
             revoked_key_fingerprints=list(self.ticket_pull.revoked_key_fingerprints),
+            closure_snapshot=self.ticket_pull.closure_snapshot,
         )
 
     async def list_key_index(self) -> list[KeyIndexEntry]:

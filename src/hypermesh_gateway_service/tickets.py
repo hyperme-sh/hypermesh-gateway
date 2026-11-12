@@ -59,6 +59,7 @@ class TicketPull:
     key_fingerprints: list[str] = field(default_factory=list)
     ir_key_fingerprints: list[str] = field(default_factory=list)
     revoked_key_fingerprints: list[str] = field(default_factory=list)
+    closure_snapshot: dict | None = None
 
 
 def _norm_fp(raw: str) -> str:
@@ -66,7 +67,8 @@ def _norm_fp(raw: str) -> str:
 
 
 class TicketCache:
-    def __init__(self, *, key_ttl_s: float = 60.0) -> None:
+    def __init__(self, *, key_ttl_s: float = 60.0, account_ledger=None) -> None:
+        self.account_ledger = account_ledger
         self.key_ttl_s = key_ttl_s
         self._tickets: dict[tuple[uuid.UUID, uuid.UUID], CachedTicket] = {}
         self._revoked: dict[uuid.UUID, set[uuid.UUID]] = {}
@@ -99,6 +101,12 @@ class TicketCache:
         pull: TicketPull,
         tunnels: Iterable[object] | None = None,
     ) -> None:
+        from controlplane_identity.account_lifecycle import enforcement_enabled
+        from hypermesh_gateway_service.account_ledger import LedgerUnavailable
+        if enforcement_enabled():
+            if self.account_ledger is None:
+                raise LedgerUnavailable()
+            self.account_ledger.apply_snapshot(tenant_id, pull.closure_snapshot)
         by_lease: dict[uuid.UUID, object] = {}
         for tunnel in tunnels or []:
             lease_id = getattr(tunnel, "lease_id", None)
@@ -241,6 +249,14 @@ class TicketCache:
         return set(self._revoked.get(tenant_id, set()))
 
     def honor(self, tenant_id: uuid.UUID, lease_id: uuid.UUID) -> TicketClaims:
+        from controlplane_identity.account_lifecycle import enforcement_enabled
+        from hypermesh_gateway_service.account_ledger import LedgerUnavailable
+        if enforcement_enabled():
+            try:
+                if self.account_ledger is None or self.account_ledger.lease_blocked(tenant_id, lease_id):
+                    raise TicketNotReady()
+            except LedgerUnavailable:
+                raise TicketNotReady() from None
         ticket = self.get(tenant_id, lease_id)
         if ticket is None or not ticket.active:
             raise TicketNotReady()

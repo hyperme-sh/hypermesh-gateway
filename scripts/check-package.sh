@@ -43,6 +43,9 @@ if [[ "${GATEWAY_NIGHTLY:-0}" == 1 ]]; then
   [[ "${GITHUB_ACTIONS:-}" == true && "${GITHUB_EVENT_NAME:-}" == schedule && "${GITHUB_REF:-}" == refs/heads/main ]] || exit 2
   test_selection=()
 fi
+if [[ "${GATEWAY_NIGHTLY:-0}" == 1 && -z "${GATEWAY_NIGHTLY_DATABASE_URL:-}" ]]; then
+  exec .venv/bin/python "$NIGHTLY_FRAMEWORK_ROOT/scripts/nightly/gateway_database.py" -- bash "$0" "$@"
+fi
 scratch=$(mktemp -d)
 cleanup() {
   if [[ -n "${TEST_EVIDENCE_DIR:-}" ]]; then

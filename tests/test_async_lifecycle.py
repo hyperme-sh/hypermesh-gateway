@@ -18,15 +18,22 @@ async def test_async_grants_enforce_account_state(monkeypatch, tenant_id, path, 
     thread = threading.get_ident()
     calls = []
 
-    async def post(url, **kwargs):
-        assert threading.get_ident() != thread
-        assert kwargs["body"]["tenant_id"] == str(tenant_id)
-        calls.append(kwargs["body"])
-        if blocked == "unavailable":
-            raise OSError("offline")
-        return {"blocked": blocked}
+    async def no_remote_guard(*args, **kwargs):
+        pytest.fail("Authorization must use local state")
 
-    monkeypatch.setattr(account_lifecycle, "_post_json", post)
+    monkeypatch.setattr(account_lifecycle, "_post_json", no_remote_guard)
+
+    class Ledger:
+        def tenant_ready(self, tenant):
+            return True
+
+        def claims_blocked(self, claims):
+            from hypermesh_gateway_service.account_ledger import LedgerUnavailable
+            assert threading.get_ident() != thread
+            calls.append(claims)
+            if blocked == "unavailable":
+                raise LedgerUnavailable()
+            return blocked
 
     class Validator(_AcceptJwt):
         def validate_sync(self, token):
@@ -36,6 +43,9 @@ async def test_async_grants_enforce_account_state(monkeypatch, tenant_id, path, 
 
     request = _request(authorization="Bearer a.b.c", tenant_id=tenant_id,
                        validator=Validator("a.b.c", tenant_id, roles=["ir"]))
+
+    request.app.state.account_ledger = Ledger()
+    request.app.state.ticket_cache = object()
 
     async def authorize():
         if path == "receipts":
