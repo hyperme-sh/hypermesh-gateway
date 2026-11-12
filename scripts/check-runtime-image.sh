@@ -31,7 +31,7 @@ probe=''
 python3 scripts/prepare-runtime-context.py --artifacts "$RELEASE_ARTIFACT_DIR" \
   --output "$scratch/context" --source-sha "$source_sha"
 built_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-docker build --build-arg "SOURCE_SHA=$source_sha" --build-arg "BUILT_AT=$built_at" \
+docker build "${ci_labels[@]}" --build-arg "SOURCE_SHA=$source_sha" --build-arg "BUILT_AT=$built_at" \
   -t "$image" "$scratch/context"
 # No tun, NET_ADMIN, peer configuration, live hosts or provider calls in package CI.
 docker run --rm "${ci_labels[@]}" --network none --cap-drop ALL --read-only \

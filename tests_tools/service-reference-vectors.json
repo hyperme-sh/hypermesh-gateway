@@ -1,0 +1,18 @@
+{
+  "schema": 1,
+  "repository": "ghcr.io/hyperme-sh/api/runtime",
+  "accepted": [
+    "ghcr.io/hyperme-sh/api/runtime:test",
+    "ghcr.io/hyperme-sh/api/runtime:0.6.1",
+    "ghcr.io/hyperme-sh/api/runtime:0.6.0-test.2"
+  ],
+  "rejected": [
+    "ghcr.io/hyperme-sh/api/runtime",
+    "ghcr.io/hyperme-sh/api/runtime@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "ghcr.io/hyperme-sh/api/runtime:test@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "ghcr.io/hyperme-sh/api/runtime:test\n",
+    "https://ghcr.io/hyperme-sh/api/runtime:test",
+    "evil.io/hyperme-sh/api/runtime:test",
+    "ghcr.io/hyperme-sh/api/runtime-other:test"
+  ]
+}

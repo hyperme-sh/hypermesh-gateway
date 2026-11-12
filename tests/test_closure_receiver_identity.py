@@ -55,7 +55,8 @@ async def test_http_receiver_identity_requires_exact_tenant_and_valid_uuid(monke
     from hypermesh_gateway_service import control_plane as module
 
     tenant, other, gateway = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
-    answer = {"tenant_id": str(tenant), "gateway_id": str(gateway)}
+    answer = {"tenant_id": str(tenant), "gateway_id": str(gateway),
+              "service_version": "0.1.1", "new_optional_field": {"enabled": True}}
     client_type = httpx.AsyncClient
 
     async def respond(request):
