@@ -1,0 +1,1 @@
+{"schema": 1, "services": {"hypermesh-gateway": "ghcr.io/hyperme-sh/hypermesh-gateway/runtime:test"}}

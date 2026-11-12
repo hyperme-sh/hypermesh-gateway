@@ -1,0 +1,8 @@
+{
+  "repository": "hyperme-sh/.github",
+  "revision": "a1963cff270b3336348061ae6efe638bebdea876",
+  "sha256": {
+    "service_channels.py": "8caed6ad48fa11fcdb0fbc756dd55214688c1ce552afd225185bbfccd2e919fb",
+    "service-reference-vectors.json": "d251c6180d917ef2e2acff8350c0edb5732dd95ebc5842eecfcee2f3d866366e"
+  }
+}

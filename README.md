@@ -283,3 +283,38 @@ For saved-history retention, run
 with the separate `HYPERMESH_HISTORY_DATABASE_URL` role. This operator entry
 checks the original closure receipt and retention interval before deleting
 entries and recording the purge. Reruns preserve the original purge timestamp.
+
+## Service-channel deployment overlay
+
+The deployment owner can render the gateway image from the shared
+`service-channels.json` contract without changing its base Compose settings:
+
+```bash
+python3 scripts/render_service_channel.py \
+  --channels deployment/service-channels.example.json \
+  --repositories deployment/service-repositories.json \
+  --output gateway-channel.compose.json
+```
+
+Use the generated JSON as the last Compose overlay for `hypermesh-gateway`.
+It contains only the approved image reference and `pull_policy: always`.
+Credentials, tenant assignments, private URLs, WireGuard capabilities and ports
+remain in the deployment-owned base configuration. Supply the generated asset
+for the environment in place of the example. The repository policy is trusted
+configuration, separate from that asset; the gateway accepts its owner GHCR
+runtime repository or the existing ACR mirror. Missing or malformed settings
+fail before output is written.
+
+A complete shared asset may include independently updated plane and payment
+channels when its trusted repository map includes those services. The renderer
+validates the asset but emits only the gateway overlay. Peer patch tags need not
+match. The gateway continues to authenticate its control-plane requests and
+refuse a mismatched tenant; no peer build identity grants authorization.
+
+The existing registered `hypermesh-gateway-installed` nightly adapter owns the
+`gatewaychannel` case: a run-owned image alias passes through this renderer and
+then the existing kernel transport/application checks. Its setup, readiness and
+cleanup are checked into Infra. Combined registry-channel advancement and real
+plane/payment peer scenarios remain tracked by
+[Infra #922](https://github.com/FyberLabs/infra/issues/922). No deployed readiness
+is inferred from the rendering contracts.
