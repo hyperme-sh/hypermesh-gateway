@@ -239,10 +239,6 @@ def accepts_manifest(
         return False
     if manifest is None:
         return True
-    digest = _manifest_digest(image_digest if isinstance(image_digest, str) else "")
-    pinned_digest = _manifest_digest(manifest.digest)
-    if pinned_digest and digest and digest != pinned_digest:
-        return False
     stamp = _manifest_stamp(built_at if isinstance(built_at, str) else "")
     pinned_stamp = _manifest_stamp(manifest.built_at)
     if pinned_stamp and stamp and stamp != pinned_stamp:
@@ -255,12 +251,16 @@ def accepts_identity(
     git_sha: object,
     built_at: object = "",
     image_digest: object = "",
+    image_reference: object = "",
     expected: str,
     pin: OwnerPin | None,
     manifest: ManifestImage | None = None,
 ) -> bool:
     """True for the reviewed owner pin or the deployed manifest image."""
 
+    if image_reference:
+        return pin is not None and pin_matches(pin, git_sha=git_sha,
+                                              image_reference=image_reference)
     if pin is not None and pin_matches(
         pin,
         git_sha=git_sha,
@@ -301,6 +301,7 @@ def versions_still_missing(
                 git_sha=item.get("git_sha"),
                 built_at=item.get("built_at", ""),
                 image_digest=item.get("image_digest", ""),
+                image_reference=item.get("image_reference", ""),
                 expected=expected,
                 pin=lookup_pin(pins, key),
                 manifest=built.get(key),
