@@ -53,7 +53,7 @@ def test_pin_matches_source_sha_and_rejects_a_disagreeing_stamp() -> None:
     )
     assert owners.pin_matches(pin, git_sha="A" * 40, built_at="unknown")
     assert not owners.pin_matches(pin, git_sha="a" * 40, built_at="2026-11-05T18:25:22Z")
-    assert not owners.pin_matches(pin, git_sha="a" * 40, image_digest="sha256:" + "cd" * 32)
+    assert owners.pin_matches(pin, git_sha="a" * 40, image_digest="sha256:" + "cd" * 32)
     assert not owners.pin_matches(pin, git_sha="b" * 40)
 
 
@@ -91,7 +91,8 @@ def test_gateway_document_is_a_single_service() -> None:
                 "repository": "hyperme-sh/hypermesh-gateway",
                 "source_sha": "e" * 40,
                 "built_at": "2026-11-05T18:25:22Z",
-                "image": "acrfybercg47.azurecr.io/hypermesh-gateway@sha256:" + "ab" * 32,
+                "image": "acrfybercg47.azurecr.io/hypermesh-gateway:test",
+                "recorded_image": "acrfybercg47.azurecr.io/hypermesh-gateway@sha256:" + "ab" * 32,
             }
         }
     )
@@ -192,3 +193,15 @@ def test_broken_snapshot_is_empty(tmp_path: Path) -> None:
     assert owners.load_snapshot(path) == {}
     path.write_text(json.dumps({"services": {"hypermesh-service": {"source_sha": "nope"}}}), encoding="utf-8")
     assert owners.load_snapshot(path) == {}
+
+
+def test_channel_comparison_ignores_recorded_digest_and_refuses_other_tags():
+    pin = owners.OwnerPin("gateway", "hyperme-sh/hypermesh-gateway", "a" * 40,
+                          image="ghcr.io/hyperme-sh/hypermesh-gateway/runtime:test")
+    assert owners.pin_matches(pin, git_sha="b" * 40, image_reference=pin.image,
+                              image_digest="sha256:" + "c" * 64)
+    for wrong in (pin.image.replace(":test", ":prod"), pin.image.split(":")[0] + "@sha256:" + "a" * 64):
+        assert not owners.pin_matches(pin, git_sha="a" * 40, image_reference=wrong)
+    import re
+    snapshot = json.loads(PIN_FILE.read_text())
+    assert all(re.fullmatch(r"[a-z0-9][a-z0-9./_-]+:test", row["image"]) for row in snapshot["services"].values())

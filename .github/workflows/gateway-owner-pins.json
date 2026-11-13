@@ -6,95 +6,110 @@
     "auth-service": {
       "repository": "hyperme-sh/auth-service",
       "source_sha": "592a07377c4eed48e308a05f65d719d416e9a6a0",
-      "image": "acrfybercg47.azurecr.io/auth-service@sha256:cf631989c3bfecd331263abf33e769d949e4b9cc50c3173feef9894cac0fab93",
-      "compose_service": "auth-service"
+      "image": "acrfybercg47.azurecr.io/auth-service:test",
+      "compose_service": "auth-service",
+      "recorded_image": "acrfybercg47.azurecr.io/auth-service@sha256:cf631989c3bfecd331263abf33e769d949e4b9cc50c3173feef9894cac0fab93"
     },
     "user-service": {
       "repository": "hyperme-sh/user-service",
       "source_sha": "ec6689be2143481846750ab8eb8b687257044165",
-      "image": "acrfybercg47.azurecr.io/user-service@sha256:7ce6c237c2b53f63986ad8dbeddc66411763c319a770dd65d11a35f3cecef5d7",
-      "compose_service": "user-service"
+      "image": "acrfybercg47.azurecr.io/user-service:test",
+      "compose_service": "user-service",
+      "recorded_image": "acrfybercg47.azurecr.io/user-service@sha256:7ce6c237c2b53f63986ad8dbeddc66411763c319a770dd65d11a35f3cecef5d7"
     },
     "payment-service": {
       "repository": "hyperme-sh/payment-service",
       "source_sha": "da3ca7d4cc8541747835ff06ce1a2e66e3f2299a",
-      "image": "acrfybercg47.azurecr.io/payment-service@sha256:3b7d6c1a410263775ec7de43f33df324080ffac4faae356ad96565362d86c4ab",
-      "compose_service": "payment-service"
+      "image": "acrfybercg47.azurecr.io/payment-service:test",
+      "compose_service": "payment-service",
+      "recorded_image": "acrfybercg47.azurecr.io/payment-service@sha256:3b7d6c1a410263775ec7de43f33df324080ffac4faae356ad96565362d86c4ab"
     },
     "controlplane-edge": {
       "repository": "hyperme-sh/controlplane-edge",
       "source_sha": "541ddfe880ccbf69419c7683afd2b2ac9135e05e",
-      "image": "acrfybercg47.azurecr.io/controlplane-edge@sha256:1f86e31253ad3c628ad97e1ada0e45ee3f0621bae470cc30abe366ecdd2faa88",
-      "compose_service": "controlplane-edge"
+      "image": "acrfybercg47.azurecr.io/controlplane-edge:test",
+      "compose_service": "controlplane-edge",
+      "recorded_image": "acrfybercg47.azurecr.io/controlplane-edge@sha256:1f86e31253ad3c628ad97e1ada0e45ee3f0621bae470cc30abe366ecdd2faa88"
     },
     "hypermesh-gateway": {
       "repository": "hyperme-sh/hypermesh-gateway",
       "source_sha": "e6b6a4662cfdcd975ff9d4820b565c30545c39cf",
       "built_at": "2026-11-05T18:25:22Z",
-      "image": "acrfybercg47.azurecr.io/hypermesh-gateway@sha256:6a0bf778021fc2104c517ca4f73edd3d3f03b0b795ed2228f2a12d76b52e3039",
-      "compose_service": "hypermesh-gateway"
+      "image": "acrfybercg47.azurecr.io/hypermesh-gateway:test",
+      "compose_service": "hypermesh-gateway",
+      "recorded_image": "acrfybercg47.azurecr.io/hypermesh-gateway@sha256:6a0bf778021fc2104c517ca4f73edd3d3f03b0b795ed2228f2a12d76b52e3039"
     },
     "api-keys-service": {
       "repository": "hyperme-sh/api-keys-service",
       "source_sha": "6dffe6dca154f519aa2880a03838a8408b74a256",
-      "image": "acrfybercg47.azurecr.io/api-keys-service@sha256:22af730be6a664e2ee112a3818d27c62414f071bd3d63f6add5b9115e6b7b286",
-      "compose_service": "api-keys-service"
+      "image": "acrfybercg47.azurecr.io/api-keys-service:test",
+      "compose_service": "api-keys-service",
+      "recorded_image": "acrfybercg47.azurecr.io/api-keys-service@sha256:22af730be6a664e2ee112a3818d27c62414f071bd3d63f6add5b9115e6b7b286"
     },
     "oracles-service": {
       "repository": "hyperme-sh/oracles",
       "source_sha": "f5e1e8d08d3cb013a46fddc8b08f50eeaf557cf2",
-      "image": "acrfybercg47.azurecr.io/oracles@sha256:e196877bf41709a0f9d757c275806bc1d986d623c233fff51836e7be0b79090e",
-      "compose_service": "oracles-service"
+      "image": "acrfybercg47.azurecr.io/oracles:test",
+      "compose_service": "oracles-service",
+      "recorded_image": "acrfybercg47.azurecr.io/oracles@sha256:e196877bf41709a0f9d757c275806bc1d986d623c233fff51836e7be0b79090e"
     },
     "turn-service": {
       "repository": "hyperme-sh/turn",
       "source_sha": "f8ec45657ea7fe1c640a73d59a4ac9a7b6b3cdc9",
-      "image": "acrfybercg47.azurecr.io/turn@sha256:c69612f54c65c89488b406f74ceaa5564cb06296dc477cdd1314117e189dd478",
-      "compose_service": "turn-service"
+      "image": "acrfybercg47.azurecr.io/turn:test",
+      "compose_service": "turn-service",
+      "recorded_image": "acrfybercg47.azurecr.io/turn@sha256:c69612f54c65c89488b406f74ceaa5564cb06296dc477cdd1314117e189dd478"
     },
     "ai-service": {
       "repository": "hyperme-sh/ai-service",
       "source_sha": "eb1e5d1442220dd98a6048d132a5827975eef83a",
-      "image": "acrfybercg47.azurecr.io/ai-service@sha256:ec37f09ea846f9782d7b0eded71fdcac21d0c9a5ff15d764c407fb1cd1d2634e",
-      "compose_service": "ai-service"
+      "image": "acrfybercg47.azurecr.io/ai-service:test",
+      "compose_service": "ai-service",
+      "recorded_image": "acrfybercg47.azurecr.io/ai-service@sha256:ec37f09ea846f9782d7b0eded71fdcac21d0c9a5ff15d764c407fb1cd1d2634e"
     },
     "acl-service": {
       "repository": "hyperme-sh/acl-service",
       "source_sha": "aab77814dc3f8901262827cc60f1a6b0abf47f0c",
-      "image": "acrfybercg47.azurecr.io/acl-service@sha256:41d230f1987f7e5bdc1ae0953af8bfac67a5cd4fc6640cce6fefe77c9d2d115c",
-      "compose_service": "acl-service"
+      "image": "acrfybercg47.azurecr.io/acl-service:test",
+      "compose_service": "acl-service",
+      "recorded_image": "acrfybercg47.azurecr.io/acl-service@sha256:41d230f1987f7e5bdc1ae0953af8bfac67a5cd4fc6640cce6fefe77c9d2d115c"
     },
     "marketplace": {
       "repository": "hyperme-sh/marketplace-service",
       "source_sha": "499697a3c826021b958f10fca3e19d38d7b92a02",
-      "image": "acrfybercg47.azurecr.io/marketplace-service@sha256:6667f92ce621b55d011d81b5a7ce3af84bb10ed0a1c6d4c0cc28a2524b2e266a",
-      "compose_service": "marketplace"
+      "image": "acrfybercg47.azurecr.io/marketplace-service:test",
+      "compose_service": "marketplace",
+      "recorded_image": "acrfybercg47.azurecr.io/marketplace-service@sha256:6667f92ce621b55d011d81b5a7ce3af84bb10ed0a1c6d4c0cc28a2524b2e266a"
     },
     "template-service": {
       "repository": "hyperme-sh/product-template",
       "source_sha": "5ca02b803a28b4ce3e1651a1e1463ee2429d2627",
-      "image": "acrfybercg47.azurecr.io/product-template@sha256:a52fde228047ac965161381d592fd949d3349c894b9e967872813f2a90ecb797",
-      "compose_service": "template-service"
+      "image": "acrfybercg47.azurecr.io/product-template:test",
+      "compose_service": "template-service",
+      "recorded_image": "acrfybercg47.azurecr.io/product-template@sha256:a52fde228047ac965161381d592fd949d3349c894b9e967872813f2a90ecb797"
     },
     "payments-service": {
       "repository": "hyperme-sh/payments-access",
       "source_sha": "c11f581e61ed6be497428ccd0bbad1b779974b8e",
-      "image": "acrfybercg47.azurecr.io/payments-access@sha256:5d5d17db5c331377fc411ec4ecd6cb19cd54fdf141379c538714ce0f850674c8",
-      "compose_service": "payments-service"
+      "image": "acrfybercg47.azurecr.io/payments-access:test",
+      "compose_service": "payments-service",
+      "recorded_image": "acrfybercg47.azurecr.io/payments-access@sha256:5d5d17db5c331377fc411ec4ecd6cb19cd54fdf141379c538714ce0f850674c8"
     },
     "hypermesh-service": {
       "repository": "hyperme-sh/hypermesh-plane",
       "source_sha": "a6f4c2fd1bb447072fc8321a283037b12be483e3",
       "built_at": "2026-11-05T16:13:35Z",
-      "image": "ghcr.io/hyperme-sh/hypermesh-plane/runtime@sha256:42e7d3cd8bf5f177615dfd0d75d9d1b71074572b1a033f0eb42f219f9916a3d5",
-      "compose_service": "hypermesh-service"
+      "image": "ghcr.io/hyperme-sh/hypermesh-plane/runtime:test",
+      "compose_service": "hypermesh-service",
+      "recorded_image": "ghcr.io/hyperme-sh/hypermesh-plane/runtime@sha256:42e7d3cd8bf5f177615dfd0d75d9d1b71074572b1a033f0eb42f219f9916a3d5"
     },
     "aiuditor-service": {
       "repository": "hyperme-sh/aiuditor",
       "source_sha": "3e29bb6a86ac4b9b3ed9672df44507ecbee9cc7d",
       "built_at": "2026-11-05T16:05:03Z",
-      "image": "ghcr.io/hyperme-sh/aiuditor/runtime@sha256:178a1800f03e168c7a594018fc8b3358258c1b77c3630f34934ca6328276b6f2",
-      "compose_service": "aiuditor-service"
+      "image": "ghcr.io/hyperme-sh/aiuditor/runtime:test",
+      "compose_service": "aiuditor-service",
+      "recorded_image": "ghcr.io/hyperme-sh/aiuditor/runtime@sha256:178a1800f03e168c7a594018fc8b3358258c1b77c3630f34934ca6328276b6f2"
     }
   }
 }

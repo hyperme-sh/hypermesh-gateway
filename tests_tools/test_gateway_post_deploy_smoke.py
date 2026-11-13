@@ -227,7 +227,7 @@ def test_header_stranger_fails_when_it_matches_neither_pin_nor_manifest() -> Non
     assert len(plane.calls) == 1
 
 
-def test_digest_disagreement_with_the_pin_fails_when_the_manifest_sha_differs() -> None:
+def test_recorded_digest_does_not_block_the_requested_revision_diagnostic() -> None:
     plane = ScriptedPlane(
         [
             (200, {"x-hypermesh-revision": DEPLOYED}, {"status": "ok"}),
@@ -255,8 +255,8 @@ def test_digest_disagreement_with_the_pin_fails_when_the_manifest_sha_differs() 
         monotonic=Clock().monotonic,
         deadline_s=0,
     )
-    assert result.status == "fail"
-    assert result.missing == ("payment-service",)
+    assert result.status == "pass"
+    assert result.missing == ()
 
 
 def test_manifest_digest_matches_when_the_pin_digest_does_not() -> None:
@@ -272,7 +272,7 @@ def test_manifest_digest_matches_when_the_pin_digest_does_not() -> None:
         digest="sha256:" + "ab" * 32,
     )
     manifest = smoke.ManifestImage("payment-service", EXPECTED, digest="sha256:" + "cd" * 32)
-    assert not owners.pin_matches(pin, git_sha=EXPECTED, image_digest=observed["image_digest"])
+    assert owners.pin_matches(pin, git_sha=EXPECTED, image_digest=observed["image_digest"])
     assert smoke.accepts_identity(
         git_sha=observed["git_sha"],
         image_digest=observed["image_digest"],
@@ -458,3 +458,12 @@ def test_snapshot_pin_accepts_the_recorded_hypermesh_sha() -> None:
         expected=EXPECTED,
         pin=owners.lookup_pin(pins, "hypermesh-service"),
     )
+
+
+def test_reported_wrong_channel_cannot_fall_back_to_matching_revision():
+    pin = owners.OwnerPin("payment-service", "hyperme-sh/payment-service", EXPECTED,
+                          image="ghcr.io/hyperme-sh/payment-service/runtime:test")
+    assert smoke.accepts_identity(git_sha="f" * 40, expected=EXPECTED, pin=pin,
+                                  image_reference=pin.image)
+    assert not smoke.accepts_identity(git_sha=EXPECTED, expected=EXPECTED, pin=pin,
+                                      image_reference=pin.image.replace(":test", ":prod"))

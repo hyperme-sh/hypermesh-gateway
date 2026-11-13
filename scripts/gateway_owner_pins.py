@@ -12,8 +12,8 @@ or the manifest image.
 A live read of FyberLabs/infra wins when the job token can see it. This
 module only sends GET requests. The snapshot committed beside the smoke
 workflow is the pin when that read is unavailable. A git sha that matches
-neither source is still behind. A digest or build stamp that disagrees
-with the pin is not that pin.
+neither source is still behind. Digest metadata does not constrain channel comparisons. Explicit revision
+diagnostics remain separate from deployment selection.
 """
 
 from __future__ import annotations
@@ -51,6 +51,7 @@ class OwnerPin:
     source_sha: str
     built_at: str = ""
     digest: str = ""
+    image: str = ""
 
 
 def image_key(service: str) -> str:
@@ -98,7 +99,8 @@ def _pin_from_row(service: str, row: Mapping[str, object]) -> OwnerPin | None:
         repository=repository,
         source_sha=source,
         built_at=_stamp(row.get("built_at")),
-        digest=_digest(row.get("image")) or _digest(row.get("digest")),
+        digest=_digest(row.get("recorded_image")) or _digest(row.get("digest")),
+        image=str(row.get("image", "")),
     )
 
 
@@ -139,21 +141,21 @@ def pin_matches(
     git_sha: object,
     built_at: object = "",
     image_digest: object = "",
+    image_reference: object = "",
 ) -> bool:
-    """True when this process is the reviewed owner image.
+    """Compare a reported tag, or perform an explicitly requested revision diagnostic.
 
-    The source sha is required. A reported digest or build stamp that
-    disagrees with the pin is not the same image. A process that omits
-    those fields still matches on the sha.
+    Recorded digests never select a deployment or constrain the comparison.
     """
+    if image_reference:
+        return (isinstance(image_reference, str)
+                and re.fullmatch(r"[a-z0-9][a-z0-9./_-]+:[A-Za-z0-9_][A-Za-z0-9_.-]*", image_reference) is not None
+                and image_reference == pin.image)
 
     if _sha(git_sha) != pin.source_sha:
         return False
     stamp = _stamp(built_at)
     if pin.built_at and stamp and stamp != pin.built_at:
-        return False
-    digest = _digest(image_digest)
-    if pin.digest and digest and digest != pin.digest:
         return False
     return True
 
