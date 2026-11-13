@@ -4,16 +4,20 @@
     {
       "distribution": "controlplane-api",
       "version": "0.23.0",
-      "dependency_revision": "82fc8c2ca21531f1a3f7a695257b3465c4a347da",
-      "artifact_revision": "82fc8c2ca21531f1a3f7a695257b3465c4a347da",
+      "dependency_revision": "316912f30dd90113ab9203eff1bc998bb89b47cf",
+      "artifact_revision": "316912f30dd90113ab9203eff1bc998bb89b47cf",
       "wheel": "controlplane_api-0.23.0-py3-none-any.whl",
-      "sha256": "56d96c8ea78a0a3e55cf1d1256f1aa9374ed3673f54ba3e1dd411cbeed8bce7a",
-      "source_url": "https://github.com/hyperme-sh/controlplane-api/tree/82fc8c2ca21531f1a3f7a695257b3465c4a347da",
+      "sha256": "823aa4ea9f98bc8693097553b61eaa635c301c640e5ded61f5943831a8f7442f",
+      "source_url": "https://github.com/hyperme-sh/controlplane-api/tree/316912f30dd90113ab9203eff1bc998bb89b47cf",
       "delivery": "local_build_from_exact_clean_git_revision",
       "qualification": "Exact-source development fixture; no prior release required and no publication claimed",
-      "source_archive_sha256": "6101e0d3ab12e19111ca71bdc3de29daf3dfe1aae88d5a8354ca54a718cfc1a5",
-      "source_tree": "1477703418ffb2e043bce2d6e734e4140fe53813",
-      "build_command": "uv build --wheel <exact clean pinned git archive>"
+      "source_archive_sha256": "590efb06d2d4742b2ccf6e10b1dd958f4dcd646e968c2f4dd11d6dfd5f9db727",
+      "source_tree": "9d8ea8aae085af31ee9c0e6997dbbaa3f50f4434",
+      "build_command": "uv build --wheel <exact clean pinned git archive>",
+      "declared_git_requirements": [
+        "controlplane-events @ git+https://github.com/hyperme-sh/controlplane-events.git@8f16587d105f7352891a1d9d77ec8305bbf5cd29",
+        "controlplane-identity @ git+https://github.com/hyperme-sh/controlplane-identity.git@a2cb7f055dced17f76e64009395ffb7599557a71"
+      ]
     },
     {
       "distribution": "controlplane-tenancy",
@@ -27,21 +31,25 @@
       "qualification": "Exact-source development fixture; no prior release required and no publication claimed",
       "source_archive_sha256": "18a9e3d0890d7172b616406784138b058c2c8955f8baab96d94bc5436849df57",
       "source_tree": "6174f1afd81590256cb722b5ff88bdbba9d51b94",
-      "build_command": "uv build --wheel <exact clean pinned git archive>"
+      "build_command": "uv build --wheel <exact clean pinned git archive>",
+      "declared_git_requirements": [
+        "controlplane-db @ git+https://github.com/hyperme-sh/controlplane-db.git@95ef61433374274f4a4fc287e15982be6357e1cc"
+      ]
     },
     {
       "distribution": "controlplane-identity",
       "version": "0.15.0",
-      "dependency_revision": "127d15fce7c3af8d8f8e239fb306ce88de76f02a",
-      "artifact_revision": "127d15fce7c3af8d8f8e239fb306ce88de76f02a",
+      "dependency_revision": "a2cb7f055dced17f76e64009395ffb7599557a71",
+      "artifact_revision": "a2cb7f055dced17f76e64009395ffb7599557a71",
       "wheel": "controlplane_identity-0.15.0-py3-none-any.whl",
-      "sha256": "2aff3207d7f1d294a37c528b4f2f953deb14fac0f6a75af06fe821fdfd689c37",
-      "source_url": "https://github.com/hyperme-sh/controlplane-identity/tree/127d15fce7c3af8d8f8e239fb306ce88de76f02a",
+      "sha256": "0a98ae7bfc04c93a460656db646b2e17506b374a5c3debf5617dd95639522308",
+      "source_url": "https://github.com/hyperme-sh/controlplane-identity/tree/a2cb7f055dced17f76e64009395ffb7599557a71",
       "delivery": "local_build_from_exact_clean_git_revision",
       "qualification": "Exact-source development fixture; no prior release required and no publication claimed",
-      "source_archive_sha256": "e0bd6b952d0f603ab0d1a704efc98c35385d196ab79ebcf86bd05d216d651f16",
-      "source_tree": "9d386c4a3d062f7086c2e83aa3ad1a04d847a6f1",
-      "build_command": "uv build --wheel <exact clean pinned git archive>"
+      "source_archive_sha256": "a86f26aa3848bd16b94aeb7c5ebac318085e54c0d6c1db3a699b14bfed4a993b",
+      "source_tree": "756217c5f8526ce32250bd5ca27d54302bc8b178",
+      "build_command": "uv build --wheel <exact clean pinned git archive>",
+      "declared_git_requirements": []
     },
     {
       "distribution": "controlplane-db",
@@ -55,7 +63,8 @@
       "qualification": "Exact-source development fixture; no prior release required and no publication claimed",
       "source_archive_sha256": "51a64a96fceb6ed75b4c885c42528f3ae24c276ecd45dead9254cfa056457a3c",
       "source_tree": "09ea3e1c90243e422402422864eac0fd818485c0",
-      "build_command": "uv build --wheel <exact clean pinned git archive>"
+      "build_command": "uv build --wheel <exact clean pinned git archive>",
+      "declared_git_requirements": []
     },
     {
       "distribution": "controlplane-events",
@@ -69,7 +78,8 @@
       "qualification": "Exact-source development fixture; no prior release required and no publication claimed",
       "source_archive_sha256": "d0214ddbcc22b21d361253f7ad8a332a0399f57e0188690fbd8166c23d725264",
       "source_tree": "768f7413286b77f06391435776762f5867ef6b1f",
-      "build_command": "uv build --wheel <exact clean pinned git archive>"
+      "build_command": "uv build --wheel <exact clean pinned git archive>",
+      "declared_git_requirements": []
     },
     {
       "distribution": "hypermesh-ticket",
@@ -83,7 +93,10 @@
       "qualification": "Exact-source development fixture; no prior release required and no publication claimed",
       "source_archive_sha256": "feb84cd63f536dd73f5839555550b5734f4e6dd4a599406f2dc5e0a55be80f7c",
       "source_tree": "9ec8992ea7746eeddf9e3475ee5343efd8e0724a",
-      "build_command": "uv build --wheel <exact clean pinned git archive>"
+      "build_command": "uv build --wheel <exact clean pinned git archive>",
+      "declared_git_requirements": [
+        "controlplane-identity @ git+https://github.com/hyperme-sh/controlplane-identity.git@127d15fce7c3af8d8f8e239fb306ce88de76f02a"
+      ]
     }
   ]
 }

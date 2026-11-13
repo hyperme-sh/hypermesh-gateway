@@ -13,9 +13,9 @@ dependencies = [
     "hypermesh-ticket @ git+https://github.com/hyperme-sh/hypermesh-ticket.git@9e5aaf2060b1a8ac56db535ee3b979ce29c44e2e",
     "httpx>=0.28.0",
     "cryptography>=44.0.0",
-    "controlplane-api @ git+https://github.com/hyperme-sh/controlplane-api.git@82fc8c2ca21531f1a3f7a695257b3465c4a347da",
+    "controlplane-api @ git+https://github.com/hyperme-sh/controlplane-api.git@316912f30dd90113ab9203eff1bc998bb89b47cf",
     "controlplane-tenancy @ git+https://github.com/hyperme-sh/controlplane-tenancy.git@f252909af772b2c820555af36de456d46f17cfcb",
-    "controlplane-identity @ git+https://github.com/hyperme-sh/controlplane-identity.git@127d15fce7c3af8d8f8e239fb306ce88de76f02a",
+    "controlplane-identity @ git+https://github.com/hyperme-sh/controlplane-identity.git@a2cb7f055dced17f76e64009395ffb7599557a71",
     "controlplane-db @ git+https://github.com/hyperme-sh/controlplane-db.git@95ef61433374274f4a4fc287e15982be6357e1cc",
     "controlplane-events @ git+https://github.com/hyperme-sh/controlplane-events.git@2a49f9af5f6c4dc9d6c4ddebc83c41d6331e2c87",
 ]
@@ -45,3 +45,10 @@ asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 
 markers = ["synthetic: ticket and mock-host chat completions (hermetic)"]
+
+# Qualify independent compatible package revisions as one application graph.
+[tool.uv]
+override-dependencies = [
+    "controlplane-identity @ git+https://github.com/hyperme-sh/controlplane-identity.git@a2cb7f055dced17f76e64009395ffb7599557a71",
+    "controlplane-events @ git+https://github.com/hyperme-sh/controlplane-events.git@2a49f9af5f6c4dc9d6c4ddebc83c41d6331e2c87",
+]

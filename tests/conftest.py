@@ -20,6 +20,7 @@ def _clear_ir_taxonomy_override(monkeypatch):
     monkeypatch.setenv("HYPERMESH_PORTAL_ORIGIN", "https://portal.test.hyperme.sh")
     monkeypatch.setenv("FASTAPI_ENV", "development")
     monkeypatch.delenv("HYPERMESH_REQUIRE_KEY_VALIDATE", raising=False)
+    monkeypatch.setattr(api_config.settings, "edge_secrets_required", False)
     monkeypatch.setattr(
         api_config.settings,
         "api_key_exchange_jwt_secret",
