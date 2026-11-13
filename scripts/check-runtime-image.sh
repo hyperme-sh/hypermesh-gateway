@@ -15,7 +15,7 @@ cleanup() {
   local status=$?
   if [[ "$status" != 0 && -n "$server" ]]; then
     printf 'gateway-runtime command-exit=%s\n' "$status" >&2
-    timeout 10 docker inspect --format 'gateway-runtime state={{.State.Status}} exit={{.State.ExitCode}} oom={{.State.OOMKilled}} restarting={{.State.Restarting}}' "$server" 2>/dev/null >&2 \
+    timeout 10 docker inspect --format 'gateway-runtime state={{.State.Status}} exit={{.State.ExitCode}} oom={{.State.OOMKilled}} restarting={{.State.Restarting}}' "$server" >&2 2>/dev/null \
       || printf 'gateway-runtime state=unavailable\n' >&2
   fi
   if [[ -n "$server" ]]; then docker rm -f "$server" >/dev/null 2>&1 || true; fi
