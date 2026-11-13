@@ -13,6 +13,12 @@ resolution-markers = [
     "python_full_version < '3.14' and sys_platform != 'emscripten' and sys_platform != 'win32'",
 ]
 
+[manifest]
+overrides = [
+    { name = "controlplane-events", git = "https://github.com/hyperme-sh/controlplane-events.git?rev=2a49f9af5f6c4dc9d6c4ddebc83c41d6331e2c87" },
+    { name = "controlplane-identity", git = "https://github.com/hyperme-sh/controlplane-identity.git?rev=a2cb7f055dced17f76e64009395ffb7599557a71" },
+]
+
 [[package]]
 name = "alembic"
 version = "1.20.1"
@@ -355,7 +361,7 @@ wheels = [
 [[package]]
 name = "controlplane-api"
 version = "0.23.0"
-source = { git = "https://github.com/hyperme-sh/controlplane-api.git?rev=82fc8c2ca21531f1a3f7a695257b3465c4a347da#82fc8c2ca21531f1a3f7a695257b3465c4a347da" }
+source = { git = "https://github.com/hyperme-sh/controlplane-api.git?rev=316912f30dd90113ab9203eff1bc998bb89b47cf#316912f30dd90113ab9203eff1bc998bb89b47cf" }
 dependencies = [
     { name = "colorlog" },
     { name = "controlplane-events" },
@@ -397,7 +403,7 @@ dependencies = [
 [[package]]
 name = "controlplane-identity"
 version = "0.15.0"
-source = { git = "https://github.com/hyperme-sh/controlplane-identity.git?rev=127d15fce7c3af8d8f8e239fb306ce88de76f02a#127d15fce7c3af8d8f8e239fb306ce88de76f02a" }
+source = { git = "https://github.com/hyperme-sh/controlplane-identity.git?rev=a2cb7f055dced17f76e64009395ffb7599557a71#a2cb7f055dced17f76e64009395ffb7599557a71" }
 dependencies = [
     { name = "eth-abi" },
     { name = "eth-account" },
@@ -987,10 +993,10 @@ image = [
 
 [package.metadata]
 requires-dist = [
-    { name = "controlplane-api", git = "https://github.com/hyperme-sh/controlplane-api.git?rev=82fc8c2ca21531f1a3f7a695257b3465c4a347da" },
+    { name = "controlplane-api", git = "https://github.com/hyperme-sh/controlplane-api.git?rev=316912f30dd90113ab9203eff1bc998bb89b47cf" },
     { name = "controlplane-db", git = "https://github.com/hyperme-sh/controlplane-db.git?rev=95ef61433374274f4a4fc287e15982be6357e1cc" },
     { name = "controlplane-events", git = "https://github.com/hyperme-sh/controlplane-events.git?rev=2a49f9af5f6c4dc9d6c4ddebc83c41d6331e2c87" },
-    { name = "controlplane-identity", git = "https://github.com/hyperme-sh/controlplane-identity.git?rev=127d15fce7c3af8d8f8e239fb306ce88de76f02a" },
+    { name = "controlplane-identity", git = "https://github.com/hyperme-sh/controlplane-identity.git?rev=a2cb7f055dced17f76e64009395ffb7599557a71" },
     { name = "controlplane-tenancy", git = "https://github.com/hyperme-sh/controlplane-tenancy.git?rev=f252909af772b2c820555af36de456d46f17cfcb" },
     { name = "cryptography", specifier = ">=44.0.0" },
     { name = "httpx", specifier = ">=0.28.0" },

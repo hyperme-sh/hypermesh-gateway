@@ -318,3 +318,13 @@ cleanup are checked into Infra. Combined registry-channel advancement and real
 plane/payment peer scenarios remain tracked by
 [Infra #922](https://github.com/FyberLabs/infra/issues/922). No deployed readiness
 is inferred from the rendering contracts.
+
+### Edge credential startup check
+
+Startup validates the exchange signing secret and API-keys internal token before
+opening owner stores or starting background refresh. Both must be distinct,
+non-default values of at least 32 characters. Optional `_PREVIOUS` values permit
+rotation through the shared identity contract and must meet the same validation.
+Errors identify settings without printing credentials. Laptop/test environments
+may explicitly set `EDGE_SECRETS_REQUIRED=false`; production keeps the default
+strict check. TEST continues to follow its moving service channel.

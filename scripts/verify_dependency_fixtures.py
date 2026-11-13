@@ -32,7 +32,11 @@ def verify(root):
             locked[entry['name']] = entry
     if not locked or len(records) != len(locked) or {r['distribution'] for r in records} != set(locked):
         raise ValueError('Fixture inventory differs from locked dependencies')
-    def references(requirements):
+    overrides = dict(pin(value) for value in project.get('tool', {}).get('uv', {}).get('override-dependencies', []))
+    for name, source in overrides.items():
+        if name not in locked or locked[name]['source'] != {'git': source}:
+            raise ValueError('Override differs from locked dependency')
+    def references(requirements, *, transitive=False):
         children = set()
         for requirement in requirements:
             if 'git+' not in requirement: continue
@@ -44,6 +48,8 @@ def verify(root):
                     raise ValueError('Unsupported conditional dependency')
                 continue
             name, source = pin(base)
+            if transitive:
+                source = overrides.get(name, source)
             if name not in locked or locked[name]['source'] != {'git': source}:
                 raise ValueError('Declared dependency differs from locked dependency')
             children.add(name)
@@ -71,7 +77,10 @@ def verify(root):
             info = email.parser.BytesParser().parsebytes(archive.read(metadata[0]))
             if info.get_all('Name') != [name] or info.get_all('Version') != [record['version']]:
                 raise ValueError('Fixture metadata differs from dependency')
-            graph[name] = references(info.get_all('Requires-Dist', []))
+            requirements = info.get_all('Requires-Dist', [])
+            if sorted(value for value in requirements if 'git+' in value) != record.get('declared_git_requirements'):
+                raise ValueError('Fixture declared dependency metadata differs from manifest')
+            graph[name] = references(requirements, transitive=True)
         wheels.append(wheel.resolve())
     reached, pending = set(), list(roots)
     while pending:

@@ -85,6 +85,8 @@ def create_app(
 ) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI):
+        from controlplane_api.config import settings
+        settings.require_edge_secrets()
         configure_logging()
         app.state.control_plane = resolve_control_plane(control_plane)
         async with AsyncExitStack() as owners:
