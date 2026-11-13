@@ -6,12 +6,12 @@
     "hypermesh_gateway_service/account_closure.py": "2bda8bc403a49dcc7de0caeeae42e0b51a6564049162eeddcda4bc80c0476f3f",
     "hypermesh_gateway_service/account_ledger.py": "c27e3fb9208d28cc8dd67dbb4942c7a4be262963dff2a81655839a1ea8cc332f",
     "hypermesh_gateway_service/account_owners.py": "aba392940a83ec8b547047a5b379a1e839b0ba9d7de8f5749b828a260234c9ee",
-    "hypermesh_gateway_service/app.py": "c4738c657f2fb9edfeabe13ad0280159a956e63bc19d484356664eb825b38e1c",
+    "hypermesh_gateway_service/app.py": "7c6768bf9c78002807e19b32bd4f5cabbfbf5d9b6a6d90fbe75c911b370285fb",
     "hypermesh_gateway_service/body_limit.py": "8f8049a92a64100eee54885b1c440b2f5e870dd961583a0daacb1008027d02eb",
     "hypermesh_gateway_service/chat.py": "e896a17752da5aae2adaed7d751f4fb9502a7cf7b81a0b578e55253b8137a70a",
     "hypermesh_gateway_service/classify.py": "30fe5d2ccc50152d6741a376c8c10f55a49c0d5983908dc502d618b7629c2b2a",
     "hypermesh_gateway_service/completions_signal.py": "688a1d5254d746ff9a0e3dbf4555769c43663a974fd78ab2e8e9371a583a31b9",
-    "hypermesh_gateway_service/control_plane.py": "458a69bdaca3b2a62ea2789f1ad1e847b0053bd37f566f3204abe041c8bb1961",
+    "hypermesh_gateway_service/control_plane.py": "181eb87b50127c9632109d2404f6c1b7bea7dfb56510ffff285b2bb25fb602d5",
     "hypermesh_gateway_service/errors.py": "f958a4e4d6ac7ae1e19a6c415765618fc4e4d54e93241e297a94f2e3c24a685e",
     "hypermesh_gateway_service/history.py": "7ca71b670ecf33d6d43cfd600a467719cc4fedc4b794d49e44b8fee56c1e8eeb",
     "hypermesh_gateway_service/inbox.py": "6888148f23797a57434c09f2bf2d32c6243cce7194e5e93d9076137aa10f4043",
@@ -33,10 +33,12 @@
     "hypermesh_gateway_service/safety.py": "fd6e21d0e080822826497110c5dc77d058f447e1483ceca914d74c748195c49f",
     "hypermesh_gateway_service/taxonomy.py": "fae0e6a97d89e32861bff9f656205ef9ecc36da08f33b356c7d984657381eaa2",
     "hypermesh_gateway_service/tenants.py": "7bcb7daf2495a632330a250e7cb8010454926c3df3e64c9b5481a495c98ed2a4",
+    "hypermesh_gateway_service/ticket_verifier.py": "2ec316e11963d88f0a87f596ba5b4c1032d2c1bbe5504f9b2e40364b3880349e",
     "hypermesh_gateway_service/tickets.py": "94e3bc187e24487718c56e0e71f3cf81169d253e94412e96cbb86a2c956365d8",
     "hypermesh_gateway_service/training.py": "0b7a68d9050be6dc3693ecda412dabf4634a03473252ad8d68456f504b2d8080",
     "hypermesh_gateway_service/verbs.py": "44cbc184d70f84d05a82befe3901b3021bf7862a8c9d1e82244657f1ff1d48c0",
-    "hypermesh_gateway_service/wg.py": "2ad74a3501cd023f11542277c9566573525ea7c1997883ec385e66472ded7510"
+    "hypermesh_gateway_service/wg.py": "2ad74a3501cd023f11542277c9566573525ea7c1997883ec385e66472ded7510",
+    "hypermesh_gateway_service/wg_identity.py": "037873d2020aaa591e70c0df3a84341f39d1f31104c45d4748484e6d13d88a01"
   },
   "provides_extra": [],
   "requires_dist": [
@@ -47,7 +49,7 @@
     "controlplane-tenancy @ git+https://github.com/hyperme-sh/controlplane-tenancy.git@f252909af772b2c820555af36de456d46f17cfcb",
     "cryptography>=44.0.0",
     "httpx>=0.28.0",
-    "hypermesh-ticket @ git+https://github.com/hyperme-sh/hypermesh-ticket.git@9e5aaf2060b1a8ac56db535ee3b979ce29c44e2e"
+    "hypermesh-ticket @ git+https://github.com/hyperme-sh/hypermesh-ticket.git@78cf2d163f6d04f017980e07b62f4093bb053fc5"
   ],
   "requires_python": [
     ">=3.13"
