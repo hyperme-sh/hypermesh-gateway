@@ -87,6 +87,8 @@ def create_app(
     async def lifespan(app: FastAPI):
         from controlplane_api.config import settings
         settings.require_edge_secrets()
+        from hypermesh_gateway_service.ticket_verifier import validate_verifier
+        validate_verifier()
         configure_logging()
         app.state.control_plane = resolve_control_plane(control_plane)
         async with AsyncExitStack() as owners:

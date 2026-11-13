@@ -129,15 +129,17 @@ The server listens on `HOST` (default `0.0.0.0`) and `PORT` (default `8000`).
 
 ### Control plane and WireGuard
 
-Before startup, securely inject `HYPERMESH_TICKET_HMAC_KEY` from the deployment secret store. It must match the control plane ticket-signing key; the gateway service credential is not a substitute. Do not generate an independent gateway key or commit/log the value. Missing verification trust prevents valid tickets from authorizing chat.
+Before startup, provide `HYPERMESH_TICKET_ED25519_PUBLIC_KEY` as a base64 32-byte public key. Gateway never receives the Plane signing private key. During an explicitly bounded upgrade, the legacy `HYPERMESH_TICKET_HMAC_KEY` may remain only with an absolute, timezone-aware `HYPERMESH_TICKET_HMAC_ACCEPT_UNTIL`. HMAC verification stops at that instant; no development fallback is supported.
+
+Mount durable private storage at `/var/lib/hypermesh-gateway` or set `HYPERMESH_WG_PRIVATE_KEY_FILE` to an absolute path on durable storage. Gateway creates a mode-0600 WireGuard identity and sends only its public key to Plane. Upgrade Gateway before Plane: it retains the old assigned identity locally while the old response is available. A missing local key for existing public assignments fails closed instead of rotating the identity. The public-only Plane advertises `X-Hypermesh-Gateway-Key-Custody: public-v1`; registration uses authenticated `POST /api/v1/hypermesh/gateway/wireguard`. Conflicting assignments or public-key registration fail before peers are applied.
 
 Also securely inject `API_KEYS_INTERNAL_TOKEN`, matching the API-keys service internal-validation secret, and configure a reachable `HYPERMESH_API_KEYS_URL`. The operational example sets `FASTAPI_ENV=production` and forces live validation with `HYPERMESH_REQUIRE_KEY_VALIDATE=1`, so inherited development settings cannot bypass revocation checks. The ticket-verification key and gateway service credential do not replace this internal token. Missing/invalid validation credentials or an unavailable API-keys service fail closed when a live check is due.
 
 Use the gateway credential the control plane issued for this deployment, the tenant ids this gateway should watch, and a host that has `/dev/net/tun`, `CAP_NET_ADMIN`, `ip`, and `wg`.
 
 ```bash
-: "${HYPERMESH_TICKET_HMAC_KEY:?Inject the control plane ticket-verification key securely first}"
-export HYPERMESH_TICKET_HMAC_KEY
+: "${HYPERMESH_TICKET_ED25519_PUBLIC_KEY:?Provide the Plane public verification key first}"
+export HYPERMESH_TICKET_ED25519_PUBLIC_KEY
 : "${API_KEYS_INTERNAL_TOKEN:?Inject the API-keys internal-validation token securely first}"
 export API_KEYS_INTERNAL_TOKEN
 export FASTAPI_ENV=production
@@ -194,7 +196,9 @@ An API key may be sent as `X-Api-Key` instead of `Authorization`. An optional `X
 | `API_KEYS_INTERNAL_TOKEN` | empty | Secret matching the API-keys internal-validation endpoint; inject securely before startup |
 | `HYPERMESH_API_KEYS_URL` | `http://api-keys-service:8000` | Reachable API-keys service base URL |
 | `HYPERMESH_CONTROL_PLANE_URL` | `http://hypermesh-service:8000` | Control plane base URL |
-| `HYPERMESH_TICKET_HMAC_KEY` | required for operational ticket verification | Secret matching the control plane ticket-signing key; inject securely before startup |
+| `HYPERMESH_TICKET_ED25519_PUBLIC_KEY` | required | Base64 32-byte public verification key |
+| `HYPERMESH_TICKET_HMAC_ACCEPT_UNTIL` | unset | Absolute end of optional legacy HMAC verification |
+| `HYPERMESH_WG_PRIVATE_KEY_FILE` | `/var/lib/hypermesh-gateway/wireguard.key` | Durable local private identity, never transmitted to Plane |
 | `HYPERMESH_GATEWAY_SERVICE_SECRET` | empty | Bearer credential for pulls and operator routes. Empty selects the stand-in plane |
 | `HYPERMESH_TENANT_IDS` | marketplace tenant | Comma-separated tenant UUIDs to pull on boot |
 | `HYPERMESH_ASSIGNMENT_REFRESH_S` | `30` | Seconds between ticket and tunnel pulls. `0` disables the loop |
@@ -232,7 +236,7 @@ The image includes `iproute2` and `wireguard-tools`. Its entrypoint exits if `ip
 
 ## How Hypermesh uses it
 
-Hypermesh leases a host to a renter. The control plane is the broker: it assigns this gateway and that host, signs a lease ticket, and stores the tunnel (gateway private key, host public key, overlay address, public endpoint).
+Hypermesh leases a host to a renter. The control plane is the broker: it assigns this gateway and that host, signs a lease ticket, and stores the tunnel (gateway public key, host public key, overlay address, public endpoint).
 
 This gateway is the data plane for that lease.
 

@@ -25,7 +25,7 @@
     },
     {
       "before": "hypermesh-ticket @ git+https://github.com/hyperme-sh/hypermesh-ticket.git@b62224be15665abb864d0dfd660fc558fb78b23f",
-      "after": "hypermesh-ticket @ git+https://github.com/hyperme-sh/hypermesh-ticket.git@9e5aaf2060b1a8ac56db535ee3b979ce29c44e2e"
+      "after": "hypermesh-ticket @ git+https://github.com/hyperme-sh/hypermesh-ticket.git@78cf2d163f6d04f017980e07b62f4093bb053fc5"
     }
   ],
   "version_policy": "pre-0.24",
@@ -40,9 +40,9 @@
   "consumer_adaptations": {
     "hypermesh_gateway_service/app.py": {
       "before_sha256": "34ff191285b498687225b5c7aa597e747530b15d7109879a36de7a77d1e269ec",
-      "after_sha256": "c4738c657f2fb9edfeabe13ad0280159a956e63bc19d484356664eb825b38e1c",
-      "reason": "Adopt local account retirement and retained owner operations without enabling collection. Validate edge secrets before opening owner stores or refresh tasks.",
-      "regression_test": "tests/test_account_ledger.py; tests/test_closure_receiver_identity.py; tests/test_account_owner_discovery.py; tests/test_edge_secret_startup.py"
+      "after_sha256": "7c6768bf9c78002807e19b32bd4f5cabbfbf5d9b6a6d90fbe75c911b370285fb",
+      "reason": "Public ticket verification and durable local WireGuard key custody with compatible public registration.",
+      "regression_test": "tests/test_key_custody.py; tests/test_hypermesh_gateway.py"
     },
     "hypermesh_gateway_service/posture.py": {
       "before_sha256": "d4adb4ee599c64af597e2eec69ddb62a496f36dd619c02a686253475eab727ec",
@@ -70,9 +70,9 @@
     },
     "hypermesh_gateway_service/control_plane.py": {
       "before_sha256": "d924d899fb8efd544d010933ce64fb2000855d180aac9a37dade866e36fb19cc",
-      "after_sha256": "458a69bdaca3b2a62ea2789f1ad1e847b0053bd37f566f3204abe041c8bb1961",
-      "reason": "Adopt local account retirement and retained owner operations without enabling collection.",
-      "regression_test": "tests/test_account_ledger.py; tests/test_closure_receiver_identity.py; tests/test_account_owner_discovery.py"
+      "after_sha256": "181eb87b50127c9632109d2404f6c1b7bea7dfb56510ffff285b2bb25fb602d5",
+      "reason": "Public ticket verification and durable local WireGuard key custody with compatible public registration.",
+      "regression_test": "tests/test_key_custody.py; tests/test_hypermesh_gateway.py"
     },
     "hypermesh_gateway_service/receipts.py": {
       "before_sha256": "68c2a367c6ba8f0066efc34f34edee998bd991f08ce7efa6c7aa397332393544",
@@ -162,6 +162,16 @@
       "sha256": "0b7a68d9050be6dc3693ecda412dabf4634a03473252ad8d68456f504b2d8080",
       "reason": "Adopt local account retirement and retained owner operations without enabling collection.",
       "regression_test": "tests/test_account_ledger.py; tests/test_closure_receiver_identity.py; tests/test_account_owner_discovery.py"
+    },
+    "hypermesh_gateway_service/wg_identity.py": {
+      "sha256": "037873d2020aaa591e70c0df3a84341f39d1f31104c45d4748484e6d13d88a01",
+      "reason": "Public ticket verification and durable local WireGuard key custody with compatible public registration.",
+      "regression_test": "tests/test_key_custody.py; tests/test_hypermesh_gateway.py"
+    },
+    "hypermesh_gateway_service/ticket_verifier.py": {
+      "sha256": "2ec316e11963d88f0a87f596ba5b4c1032d2c1bbe5504f9b2e40364b3880349e",
+      "reason": "Public ticket verification and durable local WireGuard key custody with compatible public registration.",
+      "regression_test": "tests/test_key_custody.py; tests/test_hypermesh_gateway.py"
     }
   },
   "removed_requirements": [

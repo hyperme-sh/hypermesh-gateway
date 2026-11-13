@@ -410,6 +410,7 @@ async def test_http_control_plane_pull_and_metrics_send_hm_gw_(tenant_id, monkey
     class DummyResponse:
         def __init__(self, status_code: int = 200) -> None:
             self.status_code = status_code
+            self.headers = {}
 
         def raise_for_status(self) -> None:
             return None
@@ -1220,10 +1221,13 @@ async def test_http_plane_accepts_idle_host_peer_without_lease(monkeypatch):
 
     tenant_id = uuid.uuid4()
     tunnel_id = uuid.uuid4()
+    from hypermesh_gateway_service.wg_identity import public_key
+    import base64
+    private = base64.b64encode(bytes(range(32))).decode()
     row = {
         "tunnel_id": str(tunnel_id), "lease_id": None,
         "status": "allocated", "endpoint": "gateway.example.test:51820",
-        "server_private_key": "test-private-key", "server_public_key": "test-server-key",
+        "server_private_key": private, "server_public_key": public_key(private),
         "peer_public_key": "test-host-key", "allowed_ips": "10.77.0.0/24",
         "client_address": "10.77.0.2/32",
     }

@@ -90,3 +90,11 @@ async def http_client(app, tenant_id):
         transport = httpx.ASGITransport(app=app)
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
             yield client
+
+
+@pytest.fixture(autouse=True)
+def _bounded_legacy_ticket_fixture(monkeypatch, tmp_path_factory):
+    from datetime import UTC, datetime, timedelta
+    monkeypatch.setenv("HYPERMESH_TICKET_HMAC_KEY", "test-plane-hypermesh-ticket-hmac")
+    monkeypatch.setenv("HYPERMESH_TICKET_HMAC_ACCEPT_UNTIL", (datetime.now(UTC)+timedelta(days=1)).isoformat())
+    monkeypatch.setenv("HYPERMESH_WG_PRIVATE_KEY_FILE", str(tmp_path_factory.mktemp("gateway-key") / "private"))
