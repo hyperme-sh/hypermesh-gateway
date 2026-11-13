@@ -58,9 +58,11 @@ assert callable(main)
 from hypermesh_gateway_service.app import create_app
 assert create_app().openapi()["paths"]
 print(json.dumps({"installed_gateway": True, "wireguard_tools_available": True}))'
+# RFC 8032 test-vector public key only; no signer or deployment credentials.
 # Exercise the shipped CMD; importing the ASGI application skips its server.
 server=$(docker run -d "${ci_labels[@]}" --network none --cap-drop ALL --read-only --tmpfs /tmp \
-  -e HYPERMESH_WG_APPLY=0 -e HYPERMESH_ASSIGNMENT_REFRESH_S=0 "$image")
+  -e HYPERMESH_WG_APPLY=0 -e HYPERMESH_ASSIGNMENT_REFRESH_S=0 \
+  -e HYPERMESH_TICKET_ED25519_PUBLIC_KEY=11qYAYKxCrfVS/7TyWQHOg7hcvPapiMlrwIaaPcHURo= "$image")
 docker exec "$server" /app/.venv/bin/python -I -c '
 import json, time, urllib.request
 for attempt in range(30):
