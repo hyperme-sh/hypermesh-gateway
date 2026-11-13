@@ -111,9 +111,11 @@ Existing owner test boundaries and live/provider qualification requirements appl
 
 ### Process only
 
-Leave the control-plane credential unset. The process starts with an in-process stand-in (empty ticket cache) and can serve health, version, and OpenAPI. Set the refresh interval to `0` so it does not poll that stand-in, and skip WireGuard commands:
+Provide the Plane's base64-encoded 32-byte Ed25519 public verification key, and leave the control-plane credential unset. The public key is required even with polling disabled; no signing key is needed. The process starts with an in-process stand-in (empty ticket cache) and can serve health, version, and OpenAPI. Set the refresh interval to `0` so it does not poll that stand-in, and skip WireGuard commands:
 
 ```bash
+: "${HYPERMESH_TICKET_ED25519_PUBLIC_KEY:?Provide the Plane public verification key first}"
+export HYPERMESH_TICKET_ED25519_PUBLIC_KEY
 export HYPERMESH_WG_APPLY=0
 export HYPERMESH_ASSIGNMENT_REFRESH_S=0
 uv run python -m hypermesh_gateway_service.main
