@@ -1,6 +1,6 @@
 # Release compatibility
 
-This component's release line is **0.1**, recorded in `release-policy.json` and `.github/workflows/release.yml`. The package version in `pyproject.toml` is 0.1.0. Patch releases on that line keep the accepted API contract. Installing the release workflow does not publish that version.
+This component's release line is **0.1**, recorded in `release-policy.json` and `.github/workflows/release-admission.yml`. The package version in `pyproject.toml` is 0.1.0. Patch releases on that line keep the accepted API contract. Installing the release workflow does not publish that version.
 
 `release-policy.json` names this repository, component `hypermesh-gateway`, release line `0.1`, and the version file `pyproject.toml`. The pinned Spanopticon workflow checks this configuration on pull requests. Version changes, and a `releases/candidate/release.json` submission, go through release admission. Every `v*` tag push goes through admission. A configuration-only result is not a compatibility result.
 
