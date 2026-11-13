@@ -84,18 +84,18 @@
     {
       "distribution": "hypermesh-ticket",
       "version": "0.1.0",
-      "dependency_revision": "9e5aaf2060b1a8ac56db535ee3b979ce29c44e2e",
-      "artifact_revision": "9e5aaf2060b1a8ac56db535ee3b979ce29c44e2e",
+      "dependency_revision": "78cf2d163f6d04f017980e07b62f4093bb053fc5",
+      "artifact_revision": "78cf2d163f6d04f017980e07b62f4093bb053fc5",
       "wheel": "hypermesh_ticket-0.1.0-py3-none-any.whl",
-      "sha256": "84e647b9d707c7599343c6cc515fa3eb80c9e586e79bc2a3adac0154202cc577",
-      "source_url": "https://github.com/hyperme-sh/hypermesh-ticket/tree/9e5aaf2060b1a8ac56db535ee3b979ce29c44e2e",
+      "sha256": "221bd348b87452b110c144fafe706450e2aaf0befc76942642e65b8a58aa8558",
+      "source_url": "https://github.com/hyperme-sh/hypermesh-ticket/tree/78cf2d163f6d04f017980e07b62f4093bb053fc5",
       "delivery": "local_build_from_exact_clean_git_revision",
       "qualification": "Exact-source development fixture; no prior release required and no publication claimed",
-      "source_archive_sha256": "feb84cd63f536dd73f5839555550b5734f4e6dd4a599406f2dc5e0a55be80f7c",
-      "source_tree": "9ec8992ea7746eeddf9e3475ee5343efd8e0724a",
+      "source_archive_sha256": "867f3105b4de25ca4ea13cf3e3e90a046e4b8d56d178a00d03443b839fcaab84",
+      "source_tree": "3e20d8f2da5c806af63cc769f3048029a69e9967",
       "build_command": "uv build --wheel <exact clean pinned git archive>",
       "declared_git_requirements": [
-        "controlplane-identity @ git+https://github.com/hyperme-sh/controlplane-identity.git@127d15fce7c3af8d8f8e239fb306ce88de76f02a"
+        "controlplane-identity @ git+https://github.com/hyperme-sh/controlplane-identity.git@5aeff3d2c00568f39ca6e8b75c7e63883d3a510b"
       ]
     }
   ]

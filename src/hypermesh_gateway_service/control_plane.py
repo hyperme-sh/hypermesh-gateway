@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import os
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Protocol
 
@@ -46,7 +46,7 @@ class GatewayTunnel:
     lease_id: uuid.UUID | None
     status: str
     endpoint: str
-    server_private_key: str | None
+    server_private_key: str | None = field(repr=False)
     server_public_key: str
     peer_public_key: str | None
     allowed_ips: str
@@ -116,15 +116,29 @@ class HttpControlPlane:
         if response.status_code == 401:
             raise PermissionError("Gateway service credential required")
         response.raise_for_status()
+        rows = response.json()
+        from hypermesh_gateway_service.wg_identity import local_identity
+        supported = response.headers.get("X-Hypermesh-Gateway-Key-Custody") == "public-v1"
+        import asyncio
+        identity = await asyncio.to_thread(local_identity, rows, registration_supported=supported)
+        if supported and identity:
+            async with httpx.AsyncClient(timeout=15, trust_env=False, follow_redirects=False) as client:
+                registered = await client.post(
+                    f"{self._base}/api/v1/hypermesh/gateway/wireguard",
+                    headers=self._headers(tenant_id), json={"public_key": identity[1]},
+                )
+            registered.raise_for_status()
+            if registered.json() != {"public_key": identity[1]}:
+                raise ValueError("Gateway public-key registration mismatch")
         out: list[GatewayTunnel] = []
-        for row in response.json():
+        for row in rows:
             out.append(
                 GatewayTunnel(
                     tunnel_id=uuid.UUID(str(row["tunnel_id"])),
                     lease_id=uuid.UUID(str(row["lease_id"])) if row.get("lease_id") else None,
                     status=str(row["status"]),
                     endpoint=str(row["endpoint"]),
-                    server_private_key=row.get("server_private_key"),
+                    server_private_key=identity[0] if identity and row.get("status") == "allocated" else None,
                     server_public_key=str(row["server_public_key"]),
                     peer_public_key=row.get("peer_public_key"),
                     allowed_ips=str(row["allowed_ips"]),

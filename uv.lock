@@ -1000,7 +1000,7 @@ requires-dist = [
     { name = "controlplane-tenancy", git = "https://github.com/hyperme-sh/controlplane-tenancy.git?rev=f252909af772b2c820555af36de456d46f17cfcb" },
     { name = "cryptography", specifier = ">=44.0.0" },
     { name = "httpx", specifier = ">=0.28.0" },
-    { name = "hypermesh-ticket", git = "https://github.com/hyperme-sh/hypermesh-ticket.git?rev=9e5aaf2060b1a8ac56db535ee3b979ce29c44e2e" },
+    { name = "hypermesh-ticket", git = "https://github.com/hyperme-sh/hypermesh-ticket.git?rev=78cf2d163f6d04f017980e07b62f4093bb053fc5" },
 ]
 
 [package.metadata.requires-dev]
@@ -1016,7 +1016,7 @@ image = [{ name = "uvicorn", specifier = "==0.54.0" }]
 [[package]]
 name = "hypermesh-ticket"
 version = "0.1.0"
-source = { git = "https://github.com/hyperme-sh/hypermesh-ticket.git?rev=9e5aaf2060b1a8ac56db535ee3b979ce29c44e2e#9e5aaf2060b1a8ac56db535ee3b979ce29c44e2e" }
+source = { git = "https://github.com/hyperme-sh/hypermesh-ticket.git?rev=78cf2d163f6d04f017980e07b62f4093bb053fc5#78cf2d163f6d04f017980e07b62f4093bb053fc5" }
 dependencies = [
     { name = "controlplane-identity" },
 ]
